@@ -84,8 +84,17 @@ export async function saveAnime(
   // title with fewer seasons than the form showed, fixable by editing it again. Use a
   // Rust command with a real transaction when partial saves start losing real work.
   const conn = await db();
+  const title = draft.title.replace(/\s+/g, " ").trim();
+  const clash = await conn.select<{ title: string }[]>(
+    "SELECT title FROM anime WHERE lower(trim(title)) = lower(?) AND id IS NOT ?",
+    [title, id ?? -1],
+  );
+  if (clash.length > 0) {
+    throw new Error(`“${clash[0].title}” is already on the shelf. Open that entry instead.`);
+  }
+
   const values = [
-    draft.title.trim(),
+    title,
     draft.year,
     draft.format,
     draft.notes?.trim() || null,
