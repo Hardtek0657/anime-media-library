@@ -24,6 +24,7 @@ html,
 body,
 #root {
   height: 100%;
+  overflow: hidden;
 }
 
 body {
@@ -215,6 +216,7 @@ textarea::placeholder {
   border-right: 1px solid var(--line);
   padding: 14px 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .filter {
@@ -255,6 +257,7 @@ textarea::placeholder {
   flex: 1;
   min-width: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
   display: flex;
   flex-direction: column;
 }
