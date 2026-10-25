@@ -34,6 +34,8 @@ shelf remembers it.
   and its own `+1 ep`, plus `Edit title` and `Delete title`.
 - Right-clicking a row opens `Edit title`, `Check for new seasons` (the check for that one
   title) and `Delete title`, which asks once before it removes anything.
+- Misspelled titles are caught: the check compares each title with AniList's and offers
+  `Rename it` rather than guessing.
 - The shelf is sorted by title, ignoring case, so the order is alphabetical rather than
   upper before lower.
 - One title per show: saving a title that already exists is refused and names the existing

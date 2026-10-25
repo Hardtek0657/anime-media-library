@@ -26,9 +26,18 @@ function editDistance(left: string, right: string): number {
 }
 
 /**
- * The closest existing title that is probably the same show: equal after normalising, or
- * within one edit per seven characters. Short titles are left alone, they match too easily.
+ * True when `stored` is probably the canonical name with a typo: one edit per seven
+ * characters, and only on titles long enough for that to mean something. A different
+ * alias ("Arifureta" for the full title) is far past this line and is left alone.
  */
+export function looksLikeTypo(stored: string, canonical: string): boolean {
+  const left = normalizeTitle(stored);
+  const right = normalizeTitle(canonical);
+  if (left === right) return false;
+  if (left.length < 6 || right.length < 6) return false;
+  const allowed = Math.max(1, Math.floor(Math.max(left.length, right.length) / 7));
+  return editDistance(left, right) <= allowed;
+}
 export function findSimilarTitle(
   title: string,
   library: Anime[],

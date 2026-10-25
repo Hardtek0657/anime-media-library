@@ -2,12 +2,14 @@ import type { ScanReport } from "./lib/scan";
 
 export function ScanNews({
   report,
+  onRename,
   onDismiss,
 }: {
   report: ScanReport;
+  onRename: (id: number, title: string) => void;
   onDismiss: () => void;
 }) {
-  const found = report.changes.length + report.details.length;
+  const found = report.changes.length + report.details.length + report.renames.length;
   return (
     <section className="news" aria-labelledby="news-title">
       <div className="news-head">
@@ -27,9 +29,26 @@ export function ScanNews({
         {report.total === 1 ? "title" : "titles"} with {report.requests}{" "}
         {report.requests === 1 ? "request" : "requests"}.
         {found === 0 && report.errors.length === 0
-          ? " No new seasons, no higher episode counts and no missing details."
+          ? " No new seasons, no higher episode counts, no misspelled titles and no missing details."
           : ""}
       </p>
+      {report.renames.length > 0 && (
+        <ul className="news-list">
+          {report.renames.map((rename) => (
+            <li key={`rename-${rename.id}`}>
+              <span className="news-name">{rename.from}</span> looks misspelled; AniList
+              lists <span className="news-name">{rename.to}</span>.{" "}
+              <button
+                type="button"
+                className="link"
+                onClick={() => onRename(rename.id, rename.to)}
+              >
+                Rename it
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
       {found > 0 && (
         <ul className="news-list">
           {report.changes.map((change) => (

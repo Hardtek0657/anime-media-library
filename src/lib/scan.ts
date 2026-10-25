@@ -14,12 +14,19 @@ export type ScanDetails = {
   fields: string[];
 };
 
+export type ScanRename = {
+  id: number;
+  from: string;
+  to: string;
+};
+
 export type ScanReport = {
   total: number;
   checked: number;
   requests: number;
   changes: ScanChange[];
   details: ScanDetails[];
+  renames: ScanRename[];
   errors: string[];
 };
 

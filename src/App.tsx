@@ -4,17 +4,19 @@ import { DetailPanel } from "./DetailPanel";
 import { ScanNews } from "./ScanNews";
 import { SettingsDialog } from "./SettingsDialog";
 import { aiHasKey, aiLookup } from "./lib/ai";
-import { anilistLookup } from "./lib/anilist";
+import { anilistLookupDeep } from "./lib/anilist";
 import {
   advanceSeason,
   applyDetails,
   applyScan,
   deleteAnime as removeAnime,
   loadLibrary,
+  renameAnime,
   saveAnime as persistAnime,
   type AnimeDraft,
 } from "./lib/db";
 import { planChange, type ScanReport } from "./lib/scan";
+import { looksLikeTypo, normalizeTitle } from "./lib/similar";
 import { statusOf, type Anime, type AnimeFormat, type Filter, type Season } from "./lib/model";
 
 function describe(cause: unknown): string {
@@ -142,6 +144,18 @@ export default function App() {
     }
   }
 
+  async function applyRename(id: number, title: string) {
+    try {
+      await renameAnime(id, title);
+      setNews((prev) =>
+        prev ? { ...prev, renames: prev.renames.filter((entry) => entry.id !== id) } : prev,
+      );
+      await reload();
+    } catch (cause) {
+      setError(describe(cause));
+    }
+  }
+
   function openMenu(anime: Anime, x: number, y: number) {
     setMenuArmed(false);
     setMenu({ x, y, anime });
@@ -164,6 +178,7 @@ export default function App() {
       requests: 0,
       changes: [],
       details: [],
+      renames: [],
       errors: [],
     };
     try {
@@ -181,43 +196,46 @@ export default function App() {
           break;
         }
 
-        // Artwork and creator fields come from AniList, only when something is missing,
-        // so a curated library costs no extra requests.
-        const missing =
-          !anime.author ||
-          !anime.studio ||
-          !anime.genres ||
-          !anime.cover ||
-          anime.seasons.some((season) => !season.cover);
-        if (missing) {
-          try {
-            report.requests += 1;
-            const found = await anilistLookup(anime.title);
-            if (found) {
-              const applied = await applyDetails(anime.id, {
-                author: found.author,
-                studio: found.studio,
-                genres: found.genres,
-                description: found.description,
-                cover: found.cover,
-                seasons: found.seasons.map((season) => ({
-                  number: season.number,
-                  cover: season.cover,
-                })),
-              });
-              const fields = [...applied.fields];
-              if (applied.seasonCovers > 0) {
-                fields.push(
-                  `${applied.seasonCovers} season ${applied.seasonCovers === 1 ? "cover" : "covers"}`,
-                );
-              }
-              if (fields.length > 0) {
-                report.details.push({ title: anime.title, fields });
-              }
+        // AniList answers for every title: it is keyless and it is the only source that
+        // can say whether a stored title is misspelled.
+        try {
+          const { details: found, calls } = await anilistLookupDeep(anime.title);
+          report.requests += calls;
+          if (found) {
+            const canonical = found.title;
+            const sameWords =
+              normalizeTitle(anime.title) === normalizeTitle(canonical ?? "");
+            if (
+              canonical &&
+              canonical !== anime.title &&
+              (sameWords || looksLikeTypo(anime.title, canonical))
+            ) {
+              report.renames.push({ id: anime.id, from: anime.title, to: canonical });
             }
-          } catch {
-            // A metadata failure must not stop the season pass; the card reports seasons.
+
+            const applied = await applyDetails(anime.id, {
+              author: found.author,
+              studio: found.studio,
+              genres: found.genres,
+              description: found.description,
+              cover: found.cover,
+              seasons: found.seasons.map((season) => ({
+                number: season.number,
+                cover: season.cover,
+              })),
+            });
+            const fields = [...applied.fields];
+            if (applied.seasonCovers > 0) {
+              fields.push(
+                `${applied.seasonCovers} season ${applied.seasonCovers === 1 ? "cover" : "covers"}`,
+              );
+            }
+            if (fields.length > 0) {
+              report.details.push({ title: anime.title, fields });
+            }
           }
+        } catch {
+          // A metadata failure must not stop the season pass; the card reports seasons.
         }
 
         report.checked += 1;
@@ -261,7 +279,13 @@ export default function App() {
         </button>
       </header>
 
-      {news && <ScanNews report={news} onDismiss={() => setNews(null)} />}
+      {news && (
+        <ScanNews
+          report={news}
+          onRename={(id, title) => void applyRename(id, title)}
+          onDismiss={() => setNews(null)}
+        />
+      )}
 
       {error && (
         <div className="banner" role="alert">

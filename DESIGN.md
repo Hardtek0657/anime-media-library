@@ -105,6 +105,10 @@ because the row content would otherwise be squeezed below a usable width.
   with a 184 by 264 cover. It is sized to read as a cover, not a caption: the shelf row is
   too narrow to show the art, and a thumbnail would not answer "what is this".
 
+- A misspelled title is suggested, never applied: the card shows both spellings and one
+  `Rename it` button, because a stored name is the user's data and only they can say a typo
+  was not deliberate.
+
 ## Deliberate omissions
 
 - **No light theme.** The owner chose the dark shelf, and a second theme would need a full

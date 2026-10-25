@@ -161,6 +161,20 @@ export async function saveAnime(
   return animeId;
 }
 
+/** Renames a title after the same duplicate check a save goes through. */
+export async function renameAnime(id: number, title: string): Promise<void> {
+  const conn = await db();
+  const clean = title.replace(/\s+/g, " ").trim();
+  const clash = await conn.select<{ title: string }[]>(
+    "SELECT title FROM anime WHERE lower(trim(title)) = lower(?) AND id IS NOT ?",
+    [clean, id],
+  );
+  if (clash.length > 0) {
+    throw new Error(`“${clash[0].title}” already has that title. Rename or delete it first.`);
+  }
+  await conn.execute("UPDATE anime SET title = ? WHERE id = ?", [clean, id]);
+}
+
 export async function deleteAnime(id: number): Promise<void> {
   const conn = await db();
   await conn.execute("DELETE FROM season WHERE anime_id = ?", [id]);
