@@ -289,7 +289,7 @@ textarea::placeholder {
 
 .strip {
   display: grid;
-  grid-template-columns: 22px 1fr 44px;
+  grid-template-columns: 30px 1fr 44px;
   gap: 6px;
   align-items: center;
   font-size: 10.5px;
@@ -525,18 +525,13 @@ textarea {
 
 .season-edit {
   display: grid;
-  grid-template-columns: 74px 1fr 1fr auto;
+  grid-template-columns: 62px 1fr 1fr auto;
   gap: 8px;
   align-items: end;
   padding: 8px;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 4px;
-}
-
-.season-edit-name {
-  font-size: 12px;
-  padding-bottom: 7px;
 }
 
 .inline-field {

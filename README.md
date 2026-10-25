@@ -13,6 +13,8 @@ shelf remembers it.
 
 - Catalog of titles with year, format and notes.
 - Seasons per title, each with an episode count and episodes watched.
+- Seasons can be numbered as a half (2.5, 4.5), and each one is tracked as its own season
+  with its own episode progress.
 - Quick `+1 ep` from the shelf, or set any episode number in the detail panel.
 - Derived status per title, so nothing drifts out of sync.
 - Filters: all, watching, completed, not started. Title search.
@@ -74,6 +76,10 @@ Status is computed from `season`, never stored, so there is no column to fall ou
 Episode counts are clamped in SQL, which means an out of range value cannot be written even
 if the UI is bypassed.
 
+Season numbers can be halves. SQLite stores `2.5` as `REAL` in the same column (integer
+affinity keeps whole numbers integers), and the composite primary key still rejects a
+second `2.5` for the same title.
+
 ## Design
 
 The interface is a dark shelf: ink and bone, one amber accent, serif titles, and a thin
@@ -97,6 +103,9 @@ Checked in the running app on Windows (WebView2 155), not only in a browser:
 - Escape closes the detail panel.
 - A six season title renders as one aggregate bar instead of six strips, and every row
   stayed 69 px tall with four titles on screen.
+- A season numbered 2.5 saved, showed as S2.5 with its own 6 of 12 progress, and survived a
+  reload. Renaming season 2 to 2.5 replaced the old row instead of leaving a duplicate.
+- Two seasons with the same number are refused with "Season 2.5 is listed twice."
 - `pnpm tauri build` produced a working bundle, and the packaged executable opened the same
   library from the same database file.
 
