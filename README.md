@@ -21,7 +21,10 @@ shelf remembers it.
 - Optional DeepSeek fill: with a key added, one button fills the year, format, seasons and
   description from the title. Off by default, and it is the only feature that uses the
   network.
-- Everything stored in a local SQLite database. Deleting a title deletes its seasons.
+- A row shows one season: the one you are in. The panel holds the full list.
+- One title per show: saving a title that already exists is refused and names the existing
+  entry.
+- Every title stored in a local SQLite database. Deleting a title deletes its seasons.
 
 ## Stack
 
@@ -135,8 +138,11 @@ Checked in the running app on Windows (WebView2 155), not only in a browser:
   panel.
 - Delete asks for confirmation, then removes the title and its seasons.
 - Escape closes the detail panel.
-- A six season title renders as one aggregate bar instead of six strips, and every row
-  stayed 69 px tall with four titles on screen.
+- A row renders exactly one season and stays 69 px tall whatever the season count. With
+  season 1 finished, season 2 at 5 of 12 and season 3 untouched, the row showed `S2 5/12`;
+  with every episode watched it showed the last season, `S3 12/12`.
+- Adding a title that already exists, `absolute duo` in different case, was refused with
+  "“Absolute Duo” is already on the shelf. Open that entry instead." and no row was created.
 - A season numbered 2.5 saved, showed as S2.5 with its own 6 of 12 progress, and survived a
   reload. Renaming season 2 to 2.5 replaced the old row instead of leaving a duplicate.
 - Two seasons with the same number are refused with "Season 2.5 is listed twice."

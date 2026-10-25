@@ -45,6 +45,22 @@ export function nextUnfinished(anime: Anime): Season | null {
   return anime.seasons.find((season) => !isSeasonDone(season)) ?? null;
 }
 
+/**
+ * The one season a shelf row talks about: the furthest season that has progress and
+ * episodes left, otherwise the first unfinished season, otherwise the last season once
+ * everything is watched.
+ */
+export function currentSeason(anime: Anime): Season | null {
+  const seasons = anime.seasons;
+  if (seasons.length === 0) return null;
+  const started = seasons.filter(
+    (season) => season.episodesWatched > 0 && !isSeasonDone(season),
+  );
+  if (started.length > 0) return started[started.length - 1];
+  const unfinished = seasons.find((season) => !isSeasonDone(season));
+  return unfinished ?? seasons[seasons.length - 1];
+}
+
 export function episodeWatched(anime: Anime): number {
   return anime.seasons.reduce((sum, season) => sum + season.episodesWatched, 0);
 }

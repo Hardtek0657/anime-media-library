@@ -1,8 +1,8 @@
 import {
   STATUS_LABEL,
+  currentSeason,
   episodeTotal,
   episodeWatched,
-  isSeasonDone,
   monogram,
   nextUnfinished,
   spineColor,
@@ -79,24 +79,6 @@ function metaLine(anime: Anime): string {
   return parts.join(" · ");
 }
 
-/** Beyond a handful of seasons, one aggregate bar keeps every row the same height. */
-function SeasonSummary({ anime }: { anime: Anime }) {
-  const done = anime.seasons.filter(isSeasonDone).length;
-  const watched = episodeWatched(anime);
-  const total = episodeTotal(anime);
-  const share = total === 0 ? 0 : Math.round((watched / total) * 100);
-  return (
-    <span className="season-summary">
-      <span className="strip-track" aria-hidden="true">
-        <span className="strip-fill" style={{ width: `${share}%` }} />
-      </span>
-      <span className="season-summary-text">
-        {done} of {anime.seasons.length} seasons complete
-      </span>
-    </span>
-  );
-}
-
 export function CatalogList({
   library,
   visible,
@@ -152,7 +134,7 @@ export function CatalogList({
       </div>
       {visible.map((anime) => {
         const next = nextUnfinished(anime);
-        const detailed = anime.seasons.length > 0 && anime.seasons.length <= 4;
+        const shown = currentSeason(anime);
         return (
           <div
             key={anime.id}
@@ -186,14 +168,11 @@ export function CatalogList({
               <span className="row-meta">{metaLine(anime)}</span>
             </span>
             <span className="row-seasons">
-              {anime.seasons.length === 0 && (
+              {shown ? (
+                <SeasonStrip season={shown} />
+              ) : (
                 <span className="more">No seasons yet</span>
               )}
-              {detailed &&
-                anime.seasons.map((season) => (
-                  <SeasonStrip key={season.number} season={season} />
-                ))}
-              {anime.seasons.length > 4 && <SeasonSummary anime={anime} />}
             </span>
             <span className="row-action">
               {next ? (

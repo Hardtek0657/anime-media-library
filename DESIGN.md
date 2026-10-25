@@ -59,10 +59,11 @@ cover source, and inventing posters would be fabricated content.
 - Centre: rows. Title and metadata left, season strips and the quick `+1` right.
 - Right: a 372 px edit panel, full height. It is a form, not a modal, so the shelf stays
   visible while editing.
-- Season detail on a row: up to four seasons render as individual strips. Above four, the
-  row swaps to one aggregate bar with a count line, so row height never grows with the
-  season count. Per-season editing stays in the panel, where a twenty season show is a
-  scroll rather than a tall card.
+- Season detail on a row: exactly one strip, the season you are in. That is the furthest
+  season with progress and episodes left, otherwise the first unfinished season, otherwise
+  the last season once everything is watched. The full list lives in the panel. One strip
+  means a row is the same height for a one season show and a twenty season show, and the
+  strip always answers "where am I" instead of "what might exist".
 
 Reason for a side panel over a modal: the task is comparing progress against the shelf, and
 a modal would hide the thing being edited. At widths under 1080 px the panel overlays,
