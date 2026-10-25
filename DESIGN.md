@@ -101,6 +101,10 @@ because the row content would otherwise be squeezed below a usable width.
   what was checked, how many requests it cost, and each change. It stays until dismissed
   because it is a record to read, not an alert to catch before it disappears.
 
+- Hovering a season opens a card with the artwork and the production facts, at 480 by 298
+  with a 184 by 264 cover. It is sized to read as a cover, not a caption: the shelf row is
+  too narrow to show the art, and a thumbnail would not answer "what is this".
+
 ## Deliberate omissions
 
 - **No light theme.** The owner chose the dark shelf, and a second theme would need a full

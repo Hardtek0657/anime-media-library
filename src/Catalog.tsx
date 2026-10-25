@@ -115,6 +115,12 @@ export function CatalogList({
   onFormat: (format: AnimeFormat | "all") => void;
 }) {
   const [pendingDelete, setPendingDelete] = useState<number | null>(null);
+  const [peek, setPeek] = useState<{
+    anime: Anime;
+    season: Season;
+    x: number;
+    y: number;
+  } | null>(null);
   const formats = FORMATS.filter((format) => library.some((anime) => anime.format === format));
 
   return (
@@ -255,7 +261,19 @@ export function CatalogList({
                   if (anime.year) meta.push(String(anime.year));
                   meta.push(`${season.episodeCount} ${season.episodeCount === 1 ? "episode" : "episodes"}`);
                   return (
-                    <div className="season-row" key={season.number}>
+                    <div
+                      className="season-row"
+                      key={season.number}
+                      onMouseEnter={(event) =>
+                        setPeek({
+                          anime,
+                          season,
+                          x: event.clientX,
+                          y: event.clientY,
+                        })
+                      }
+                      onMouseLeave={() => setPeek(null)}
+                    >
                       {season.cover || anime.cover ? (
                         <img
                           className="row-art"
@@ -339,6 +357,61 @@ export function CatalogList({
           </div>
         );
       })}
+      {peek && <SeasonPeek {...peek} />}
+    </div>
+  );
+}
+
+/** Hover card for a season row: the series facts, without leaving the shelf. */
+function SeasonPeek({
+  anime,
+  season,
+  x,
+  y,
+}: {
+  anime: Anime;
+  season: Season;
+  x: number;
+  y: number;
+}) {
+  const art = season.cover ?? anime.cover;
+  const facts: [string, string][] = [];
+  if (anime.studio) facts.push(["Studio", anime.studio]);
+  if (anime.author) facts.push(["Creator", anime.author]);
+  if (anime.genres) facts.push(["Genres", anime.genres]);
+  const width = 480;
+  const left = Math.max(12, Math.min(x + 16, window.innerWidth - width - 12));
+  const top = Math.max(12, Math.min(y - 80, window.innerHeight - 340));
+
+  return (
+    <div className="peek" style={{ left, top, width }} role="tooltip">
+      {art ? (
+        <img className="peek-art" src={art} alt="" />
+      ) : (
+        <span className="peek-art empty" aria-hidden="true" />
+      )}
+      <div className="peek-body">
+        <p className="peek-title">{anime.title}</p>
+        <p className="peek-sub">
+          {anime.format}
+          {anime.year ? ` · ${anime.year}` : ""} · Season {season.number}
+        </p>
+        {facts.length > 0 ? (
+          <dl className="peek-facts">
+            {facts.map(([label, value]) => (
+              <div key={label}>
+                <dt>{label}</dt>
+                <dd>{value}</dd>
+              </div>
+            ))}
+          </dl>
+        ) : (
+          <p className="peek-note">
+            No studio, creator or genres yet. Use Fetch artwork and details.
+          </p>
+        )}
+        {anime.description && <p className="peek-desc">{anime.description}</p>}
+      </div>
     </div>
   );
 }
