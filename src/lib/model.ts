@@ -14,6 +14,7 @@ export type Anime = {
   year: number | null;
   format: AnimeFormat;
   notes: string | null;
+  description: string | null;
   seasons: Season[];
 };
 

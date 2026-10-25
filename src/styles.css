@@ -604,3 +604,63 @@ textarea {
   border-radius: 6px;
   border: 3px solid var(--ink);
 }
+
+.ai-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 12px;
+  margin-top: -8px;
+}
+
+.ai-row .hint,
+.ai-row .problem {
+  margin: 0;
+}
+
+.link {
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: var(--amber);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgb(6 7 9 / 78%);
+}
+
+.dialog {
+  width: min(460px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 22px;
+  background: var(--surface-2);
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+}
+
+.dialog h2 {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 20px;
+  font-weight: 500;
+  color: var(--bone);
+}
+
+.dialog-text {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--muted);
+}

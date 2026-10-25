@@ -11,13 +11,16 @@ shelf remembers it.
 
 ## What it does
 
-- Catalog of titles with year, format and notes.
+- Catalog of titles with year, format, description and notes.
 - Seasons per title, each with an episode count and episodes watched.
 - Seasons can be numbered as a half (2.5, 4.5), and each one is tracked as its own season
   with its own episode progress.
 - Quick `+1 ep` from the shelf, or set any episode number in the detail panel.
 - Derived status per title, so nothing drifts out of sync.
 - Filters: all, watching, completed, not started. Title search.
+- Optional DeepSeek fill: with a key added, one button fills the year, format, seasons and
+  description from the title. Off by default, and it is the only feature that uses the
+  network.
 - Everything stored in a local SQLite database. Deleting a title deletes its seasons.
 
 ## Stack
@@ -27,6 +30,7 @@ shelf remembers it.
 | Shell | Tauri 2 (WebView2 on Windows) |
 | UI | React 19, TypeScript, Vite |
 | Storage | SQLite through `tauri-plugin-sql`, migrations declared in Rust |
+| Optional AI | Rust command calling DeepSeek; the key lives in the Windows Credential Manager |
 
 ## Run it
 
@@ -49,6 +53,28 @@ pnpm tauri build
 One SQLite file, `anime-library.db`, in the app config directory. On Windows that is
 `%APPDATA%\com.hardtek.animemedialibrary\`. Copy that file to back up the library.
 
+The DeepSeek key is not in that file. It is stored as a Windows credential under
+`anime-media-library` / `deepseek`, and it is removed from the same dialog that saved it.
+
+## Optional AI fill
+
+Open `AI settings` in the header, paste a DeepSeek key, and save. Nothing is sent anywhere
+until you press `Fill from AI` in the title panel, and the app keeps working normally
+without a key.
+
+- What leaves the machine: the title you typed, once per press, to
+  `https://api.deepseek.com/chat/completions`.
+- What comes back: a JSON object with year, format, seasons and a short description. The
+  Rust side validates every field, drops impossible values (year outside 1900 to 2100, zero
+  episodes, duplicate season numbers) and caps the season list.
+- What it changes: empty fields only. A new title gets the suggested seasons; editing an
+  existing title never replaces the seasons you already logged.
+- Failures are shown in the panel: a rejected key, no balance, rate limiting, a network
+  error, or a reply that is not the expected JSON.
+
+The provider is one constant pair (`ENDPOINT` and `MODEL` in `src-tauri/src/ai.rs`), so
+another OpenAI-compatible endpoint is a config change rather than a rewrite.
+
 ## Schema
 
 ```sql
@@ -59,6 +85,7 @@ CREATE TABLE anime (
   format     TEXT    NOT NULL DEFAULT 'TV'
                      CHECK (format IN ('TV', 'Movie', 'OVA', 'ONA', 'Special')),
   notes      TEXT,
+  description TEXT,
   created_at TEXT    NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -106,13 +133,21 @@ Checked in the running app on Windows (WebView2 155), not only in a browser:
 - A season numbered 2.5 saved, showed as S2.5 with its own 6 of 12 progress, and survived a
   reload. Renaming season 2 to 2.5 replaced the old row instead of leaving a duplicate.
 - Two seasons with the same number are refused with "Season 2.5 is listed twice."
+- With no key saved, the panel says so and offers `Add one`; the dialog reports `No key
+  saved.` and stores nothing.
+- Saving a key reports `A key is saved.` and adds `Remove key`; removing it returns the
+  panel to the no key hint.
+- Asking DeepSeek with a deliberately wrong key showed "DeepSeek rejected the API key.
+  Check it in AI settings." in the panel, with the draft untouched.
+- A description typed in the panel saved, reopened with the same text, and the temporary
+  title was deleted afterwards.
 - `pnpm tauri build` produced a working bundle, and the packaged executable opened the same
   library from the same database file.
 
 ## Not included
 
-No metadata API, no cover downloads, no sync, no ratings, no import or export. The app is
-deliberately offline: the only file it touches is its own database.
+No metadata API, no cover downloads, no sync, no ratings, no import or export. Apart from
+the optional DeepSeek call, the app touches one file: its own database.
 
 ## Development notes
 

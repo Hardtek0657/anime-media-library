@@ -16,6 +16,7 @@ type LibraryRow = {
   year: number | null;
   format: AnimeFormat;
   notes: string | null;
+  description: string | null;
   season_number: number | null;
   episode_count: number | null;
   episodes_watched: number | null;
@@ -25,7 +26,7 @@ export async function loadLibrary(): Promise<Anime[]> {
   const rows = await (
     await db()
   ).select<LibraryRow[]>(
-    `SELECT a.id, a.title, a.year, a.format, a.notes,
+    `SELECT a.id, a.title, a.year, a.format, a.notes, a.description,
             s.number AS season_number, s.episode_count, s.episodes_watched
        FROM anime a
        LEFT JOIN season s ON s.anime_id = a.id
@@ -42,6 +43,7 @@ export async function loadLibrary(): Promise<Anime[]> {
         year: row.year,
         format: row.format,
         notes: row.notes,
+        description: row.description,
         seasons: [],
       };
       byId.set(row.id, anime);
@@ -66,6 +68,7 @@ export type AnimeDraft = {
   year: number | null;
   format: AnimeFormat;
   notes: string | null;
+  description: string | null;
 };
 
 export async function saveAnime(
@@ -83,6 +86,7 @@ export async function saveAnime(
     draft.year,
     draft.format,
     draft.notes?.trim() || null,
+    draft.description?.trim() || null,
   ];
 
   let animeId = id;
@@ -90,15 +94,15 @@ export async function saveAnime(
     // RETURNING, not last_insert_rowid(): the plugin pools connections, so the
     // rowid lookup can land on a different connection and return 0.
     const inserted = await conn.select<{ id: number }[]>(
-      `INSERT INTO anime (title, year, format, notes)
-            VALUES (?, ?, ?, ?) RETURNING id`,
+      `INSERT INTO anime (title, year, format, notes, description)
+            VALUES (?, ?, ?, ?, ?) RETURNING id`,
       values,
     );
     animeId = inserted[0].id;
   } else {
 
     await conn.execute(
-      "UPDATE anime SET title = ?, year = ?, format = ?, notes = ? WHERE id = ?",
+      "UPDATE anime SET title = ?, year = ?, format = ?, notes = ?, description = ? WHERE id = ?",
       [...values, animeId],
     );
   }

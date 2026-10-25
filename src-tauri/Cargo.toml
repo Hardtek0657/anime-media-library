@@ -19,6 +19,10 @@ tauri = { version = "2", features = [] }
 tauri-plugin-sql = { version = "2", features = ["sqlite"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# The API key is kept in the Windows Credential Manager, not in the SQLite file.
+keyring = { version = "3", features = ["windows-native"] }
+# One blocking HTTPS call for the optional lookup; native TLS avoids a rustls build.
+reqwest = { version = "0.12", features = ["blocking", "json"] }
 
 [profile.release]
 codegen-units = 1

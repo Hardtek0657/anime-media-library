@@ -75,6 +75,17 @@ because the row content would otherwise be squeezed below a usable width.
 - Loading: "Reading the shelf…" while the database opens.
 - Error: a banner with the message and a retry, and the record is never silently dropped.
 
+## Optional AI
+
+- The key lives in a centered dialog, not a settings page: one field, one status line and
+  three actions did not earn a whole screen, and a dialog keeps the shelf visible behind it.
+- `Fill from AI` sits under the Title field because that is the only input it needs, and the
+  result lands in the form the user was already editing, so nothing is saved without review.
+- The no-key state is a sentence with one inline action rather than a disabled button with a
+  tooltip; the reason is text the user can read, and the way out is one click.
+- Everything the model returns is treated as a draft: impossible values are dropped in Rust
+  before they reach the form, and failures print in the same `.problem` style as validation.
+
 ## Deliberate omissions
 
 - **No light theme.** The owner chose the dark shelf, and a second theme would need a full

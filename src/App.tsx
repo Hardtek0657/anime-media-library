@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CatalogList, FilterRail } from "./Catalog";
 import { DetailPanel } from "./DetailPanel";
+import { SettingsDialog } from "./SettingsDialog";
+import { aiHasKey } from "./lib/ai";
 import {
   advanceSeason,
   deleteAnime as removeAnime,
@@ -22,6 +24,8 @@ export default function App() {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [creating, setCreating] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [aiReady, setAiReady] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const reload = useCallback(async () => {
     try {
@@ -37,15 +41,21 @@ export default function App() {
   }, [reload]);
 
   useEffect(() => {
+    aiHasKey()
+      .then(setAiReady)
+      .catch(() => setAiReady(false));
+  }, []);
+
+  useEffect(() => {
     function onKey(event: KeyboardEvent) {
-      if (event.key === "Escape") {
+      if (event.key === "Escape" && !settingsOpen) {
         setSelectedId(null);
         setCreating(false);
       }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [settingsOpen]);
 
   const visible = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -126,6 +136,9 @@ export default function App() {
           placeholder="Filter titles"
           aria-label="Filter titles"
         />
+        <button type="button" className="btn" onClick={() => setSettingsOpen(true)}>
+          AI settings
+        </button>
         <button type="button" className="btn primary" onClick={openNew}>
           Add title
         </button>
@@ -181,12 +194,22 @@ export default function App() {
             key={creating ? "new" : `edit-${selectedId}`}
             anime={creating ? null : selected}
             busy={busy}
+            aiReady={aiReady}
+            onOpenSettings={() => setSettingsOpen(true)}
             onClose={closePanel}
             onSave={save}
             onDelete={remove}
           />
         )}
       </div>
+
+      {settingsOpen && (
+        <SettingsDialog
+          saved={aiReady}
+          onClose={() => setSettingsOpen(false)}
+          onSaved={setAiReady}
+        />
+      )}
     </div>
   );
 }

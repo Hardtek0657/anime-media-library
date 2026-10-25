@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import { aiLookup } from "./lib/ai";
 import type { AnimeDraft } from "./lib/db";
 import {
   FORMATS,
@@ -8,6 +9,14 @@ import {
   type AnimeFormat,
   type Season,
 } from "./lib/model";
+
+function sentenceCase(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+function seasonCount(count: number): string {
+  return count === 1 ? "1 season" : `${count} seasons`;
+}
 
 type SeasonRow = {
   key: string;
@@ -35,12 +44,16 @@ function rowsFrom(anime: Anime | null): SeasonRow[] {
 export function DetailPanel({
   anime,
   busy,
+  aiReady,
+  onOpenSettings,
   onClose,
   onSave,
   onDelete,
 }: {
   anime: Anime | null;
   busy: boolean;
+  aiReady: boolean;
+  onOpenSettings: () => void;
   onClose: () => void;
   onSave: (
     id: number | null,
@@ -54,14 +67,68 @@ export function DetailPanel({
   const [year, setYear] = useState(anime?.year ? String(anime.year) : "");
   const [format, setFormat] = useState<AnimeFormat>(anime?.format ?? "TV");
   const [notes, setNotes] = useState(anime?.notes ?? "");
+  const [description, setDescription] = useState(anime?.description ?? "");
   const [rows, setRows] = useState<SeasonRow[]>(() => rowsFrom(anime));
   const [problem, setProblem] = useState<string | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiNote, setAiNote] = useState<string | null>(null);
+  const [aiProblem, setAiProblem] = useState<string | null>(null);
   const titleRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     titleRef.current?.focus();
   }, []);
+
+  async function fillFromAi() {
+    const cleanTitle = title.trim();
+    if (!cleanTitle) {
+      setAiProblem("Type the title first.");
+      titleRef.current?.focus();
+      return;
+    }
+    setAiBusy(true);
+    setAiProblem(null);
+    setAiNote(null);
+    try {
+      const answer = await aiLookup(cleanTitle);
+      const filled: string[] = [];
+      if (!year && answer.year) {
+        setYear(String(answer.year));
+        filled.push("year");
+      }
+      if (!anime && answer.format !== format) {
+        setFormat(answer.format);
+        filled.push("format");
+      }
+      if (!description.trim() && answer.description) {
+        setDescription(answer.description);
+        filled.push("description");
+      }
+      if (!anime && answer.seasons.length > 0) {
+        setRows(
+          answer.seasons.map((season) => ({
+            key: `ai-${nextRowKey++}`,
+            number: String(season.number),
+            count: String(season.episodes),
+            watched: "0",
+          })),
+        );
+        filled.push(seasonCount(answer.seasons.length));
+      }
+      const kept =
+        anime !== null && answer.seasons.length > 0 ? " Existing seasons left as they are." : "";
+      setAiNote(
+        filled.length > 0
+          ? `${sentenceCase(filled.join(", "))} filled from DeepSeek. Review before saving.${kept}`
+          : `Nothing new to fill; those fields already have values.${kept}`,
+      );
+    } catch (cause) {
+      setAiProblem(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setAiBusy(false);
+    }
+  }
 
   function updateRow(key: string, patch: Partial<SeasonRow>) {
     setRows((prev) =>
@@ -138,6 +205,7 @@ export function DetailPanel({
           year: Number.isFinite(parsedYear) && parsedYear >= 1900 ? parsedYear : null,
           format,
           notes: notes.trim() ? notes.trim() : null,
+          description: description.trim() ? description.trim() : null,
         },
         seasons,
         removed,
@@ -185,6 +253,32 @@ export function DetailPanel({
           aria-invalid={problem === "A title is required." ? true : undefined}
         />
       </label>
+
+      <div className="ai-row">
+        {aiReady ? (
+          <button
+            type="button"
+            className="quiet"
+            onClick={() => void fillFromAi()}
+            disabled={aiBusy || busy}
+          >
+            {aiBusy ? "Asking DeepSeek" : "Fill from AI"}
+          </button>
+        ) : (
+          <span className="hint">
+            AI fill needs a DeepSeek key.{" "}
+            <button type="button" className="link" onClick={onOpenSettings}>
+              Add one
+            </button>
+          </span>
+        )}
+        {aiProblem && (
+          <p className="problem" role="alert">
+            {aiProblem}
+          </p>
+        )}
+        {aiNote && <p className="hint">{aiNote}</p>}
+      </div>
 
       <div className="field-pair">
         <label className="field">
@@ -264,6 +358,16 @@ export function DetailPanel({
           Add season
         </button>
       </div>
+
+      <label className="field">
+        <span>Description</span>
+        <textarea
+          rows={3}
+          value={description}
+          onChange={(event) => setDescription(event.target.value)}
+          placeholder="What the show is about"
+        />
+      </label>
 
       <label className="field">
         <span>Notes</span>
