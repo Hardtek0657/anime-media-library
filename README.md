@@ -7,6 +7,8 @@ episode is logged, **Completed** when every season is finished, and **Not starte
 that. Stopping mid-season is a first-class case: set the last episode you watched and the
 shelf remembers it.
 
+![The shelf with three titles at different stages](docs/shelf.png)
+
 ## What it does
 
 - Catalog of titles with year, format and notes.
@@ -78,6 +80,24 @@ The interface is a dark shelf: ink and bone, one amber accent, serif titles, and
 spine per row whose colour is derived from the title. Details and the reasoning are in
 [DESIGN.md](DESIGN.md).
 
+## Verified
+
+Checked in the running app on Windows (WebView2 155), not only in a browser:
+
+- First launch creates the schema and shows the empty state with the add action.
+- Adding a title with one season and 3 of 28 episodes saved it as Watching.
+- `+1 ep` took that season from 3/28 to 4/28 and the count survived a reload.
+- Setting the last episode of the final season moved the title to Completed, and the rail
+  count followed.
+- Filters and search: Watching, Completed and the empty result state each show the right
+  rows; searching a title narrows the list to it.
+- An empty title and a zero episode count are both refused, with the message inside the
+  panel.
+- Delete asks for confirmation, then removes the title and its seasons.
+- Escape closes the detail panel.
+- `pnpm tauri build` produced a working bundle, and the packaged executable opened the same
+  library from the same database file.
+
 ## Not included
 
 No metadata API, no cover downloads, no sync, no ratings, no import or export. The app is
@@ -87,4 +107,9 @@ deliberately offline: the only file it touches is its own database.
 
 - `src-tauri/migrations/` holds SQL applied at startup. Add a new numbered file and a
   matching `Migration` entry in `src-tauri/src/lib.rs` instead of editing an applied one.
-- Database capabilities live in `src-tauri/capabilities/default.json` (`sql:default`).
+- Database capabilities live in `src-tauri/capabilities/default.json`, which grants load,
+  select, execute and close on the app's own database.
+- `src-tauri/tauri.debug.conf.json` is a development-only config that opens the WebView2
+  debugging port on 9222 and marks the window title. Run it with
+  `pnpm tauri dev --config src-tauri/tauri.debug.conf.json`. The shipped config leaves the
+  port closed.
