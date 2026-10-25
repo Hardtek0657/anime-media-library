@@ -68,6 +68,10 @@ cover source, and inventing posters would be fabricated content.
   the last season once everything is watched. The full list lives in the panel. One strip
   means a row is the same height for a one season show and a twenty season show, and the
   strip always answers "where am I" instead of "what might exist".
+- Clicking a row opens it in place rather than in the panel: the season list is what the
+  user reads most, and a dropdown keeps the shelf visible while every season gets its own
+  art, number and `+1 ep`. Editing data is a different intent, so the panel opens from
+  `Edit title` (or the right-click menu) where the user already asked to change something.
 
 Reason for a side panel over a modal: the task is comparing progress against the shelf, and
 a modal would hide the thing being edited. At widths under 1080 px the panel overlays,

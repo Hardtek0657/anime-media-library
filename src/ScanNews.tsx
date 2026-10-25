@@ -25,7 +25,7 @@ export function ScanNews({
       <p className="news-summary">
         Checked {report.checked} of {report.total}{" "}
         {report.total === 1 ? "title" : "titles"} with {report.requests}{" "}
-        {report.requests === 1 ? "request" : "requests"} to DeepSeek and AniList.
+        {report.requests === 1 ? "request" : "requests"}.
         {found === 0 && report.errors.length === 0
           ? " No new seasons, no higher episode counts and no missing details."
           : ""}

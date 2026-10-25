@@ -1,9 +1,11 @@
+import { useState } from "react";
 import {
   FORMATS,
   STATUS_LABEL,
   currentSeason,
   episodeTotal,
   episodeWatched,
+  isSeasonDone,
   monogram,
   nextUnfinished,
   spineColor,
@@ -87,9 +89,12 @@ export function CatalogList({
   filter,
   format,
   query,
-  selectedId,
+  expandedId,
   busy,
-  onSelect,
+  onToggle,
+  onMenu,
+  onEdit,
+  onDelete,
   onAdd,
   onAdvance,
   onFormat,
@@ -99,13 +104,17 @@ export function CatalogList({
   filter: Filter;
   format: AnimeFormat | "all";
   query: string;
-  selectedId: number | null;
+  expandedId: number | null;
   busy: boolean;
-  onSelect: (id: number) => void;
+  onToggle: (id: number) => void;
+  onMenu: (anime: Anime, x: number, y: number) => void;
+  onEdit: (id: number) => void;
+  onDelete: (id: number) => Promise<void>;
   onAdd: () => void;
   onAdvance: (anime: Anime, season: Season) => void;
   onFormat: (format: AnimeFormat | "all") => void;
 }) {
+  const [pendingDelete, setPendingDelete] = useState<number | null>(null);
   const formats = FORMATS.filter((format) => library.some((anime) => anime.format === format));
 
   return (
@@ -161,74 +170,166 @@ export function CatalogList({
       {visible.map((anime) => {
         const next = nextUnfinished(anime);
         const shown = currentSeason(anime);
+        const open = expandedId === anime.id;
         return (
-          <div
-            key={anime.id}
-            className="row"
-            data-selected={selectedId === anime.id ? "true" : undefined}
-            onClick={() => onSelect(anime.id)}
-          >
-            <span
-              className="spine"
-              style={{ background: spineColor(anime.title) }}
-              aria-hidden="true"
-            />
-            {shown?.cover || anime.cover ? (
-              <img
-                className="row-art"
-                src={shown?.cover ?? anime.cover ?? ""}
-                alt=""
-                loading="lazy"
-              />
-            ) : (
+          <div className="row-wrap" key={anime.id}>
+            <div
+              className="row"
+              data-selected={open ? "true" : undefined}
+              onClick={() => onToggle(anime.id)}
+              onContextMenu={(event) => {
+                event.preventDefault();
+                onMenu(anime, event.clientX, event.clientY);
+              }}
+            >
               <span
-                className="monogram"
-                style={{ color: spineColor(anime.title) }}
+                className="spine"
+                style={{ background: spineColor(anime.title) }}
                 aria-hidden="true"
-              >
-                {monogram(anime.title)}
-              </span>
-            )}
-            <span className="row-main">
-              <button
-                type="button"
-                className="row-title"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onSelect(anime.id);
-                }}
-              >
-                {anime.title}
-              </button>
-              <span className="row-meta">{metaLine(anime)}</span>
-            </span>
-            <span className="row-seasons">
-              {shown ? (
-                <SeasonStrip season={shown} />
+              />
+              {shown?.cover || anime.cover ? (
+                <img
+                  className="row-art"
+                  src={shown?.cover ?? anime.cover ?? ""}
+                  alt=""
+                  loading="lazy"
+                />
               ) : (
-                <span className="more">No seasons yet</span>
-              )}
-            </span>
-            <span className="row-action">
-              {next ? (
-                <button
-                  type="button"
-                  className="advance"
-                  disabled={busy}
-                  aria-label={`Log episode ${next.episodesWatched + 1} of season ${next.number} for ${anime.title}`}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onAdvance(anime, next);
-                  }}
+                <span
+                  className="monogram"
+                  style={{ color: spineColor(anime.title) }}
+                  aria-hidden="true"
                 >
-                  +1 ep
-                </button>
-              ) : (
-                <span className="row-done">
-                  {anime.seasons.length > 0 ? "Done" : ""}
+                  {monogram(anime.title)}
                 </span>
               )}
-            </span>
+              <span className="row-main">
+                <button
+                  type="button"
+                  className="row-title"
+                  aria-expanded={open}
+                  // The row owns the toggle, so a click here would fire it twice. The
+                  // button stays for focus and Enter, and the click bubbles up once.
+                >
+                  {anime.title}
+                </button>
+                <span className="row-meta">{metaLine(anime)}</span>
+              </span>
+              <span className="row-seasons">
+                {shown ? (
+                  <SeasonStrip season={shown} />
+                ) : (
+                  <span className="more">No seasons yet</span>
+                )}
+              </span>
+              <span className="row-action">
+                {next ? (
+                  <button
+                    type="button"
+                    className="advance"
+                    disabled={busy}
+                    aria-label={`Log episode ${next.episodesWatched + 1} of season ${next.number} for ${anime.title}`}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onAdvance(anime, next);
+                    }}
+                  >
+                    +1 ep
+                  </button>
+                ) : (
+                  <span className="row-done">
+                    {anime.seasons.length > 0 ? "Done" : ""}
+                  </span>
+                )}
+              </span>
+            </div>
+
+            {open && (
+              <div className="row-expand">
+                {anime.seasons.length === 0 && (
+                  <p className="expand-note">No seasons logged yet.</p>
+                )}
+                {anime.seasons.map((season) => {
+                  const done = isSeasonDone(season);
+                  return (
+                    <div className="season-line" key={season.number}>
+                      {season.cover || anime.cover ? (
+                        <img
+                          className="season-art"
+                          src={season.cover ?? anime.cover ?? ""}
+                          alt=""
+                          loading="lazy"
+                        />
+                      ) : (
+                        <span className="season-art empty" aria-hidden="true" />
+                      )}
+                      <span className="season-tag">S{season.number}</span>
+                      <span className="season-count">
+                        {season.episodesWatched} of {season.episodeCount} episodes
+                      </span>
+                      <span className="season-action">
+                        {done ? (
+                          <span className="row-done">Done</span>
+                        ) : (
+                          <button
+                            type="button"
+                            className="advance"
+                            disabled={busy}
+                            aria-label={`Log episode ${season.episodesWatched + 1} of season ${season.number} for ${anime.title}`}
+                            onClick={() => onAdvance(anime, season)}
+                          >
+                            +1 ep
+                          </button>
+                        )}
+                      </span>
+                    </div>
+                  );
+                })}
+                <div className="expand-foot">
+                  <button type="button" className="quiet" onClick={() => onEdit(anime.id)}>
+                    Edit title
+                  </button>
+                  {pendingDelete === anime.id ? (
+                    <>
+                      <button
+                        type="button"
+                        className="quiet danger"
+                        disabled={busy}
+                        onClick={() => {
+                          setPendingDelete(null);
+                          void onDelete(anime.id);
+                        }}
+                      >
+                        Delete “{anime.title}”?
+                      </button>
+                      <button
+                        type="button"
+                        className="link"
+                        onClick={() => setPendingDelete(null)}
+                      >
+                        Keep it
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      type="button"
+                      className="quiet danger"
+                      disabled={busy}
+                      onClick={() => setPendingDelete(anime.id)}
+                    >
+                      Delete title
+                    </button>
+                  )}
+                  {(anime.studio || anime.author || anime.genres) && (
+                    <span className="expand-meta">
+                      {[anime.studio, anime.author, anime.genres]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         );
       })}

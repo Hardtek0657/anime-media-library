@@ -36,6 +36,9 @@ export default function App() {
   const [scanDone, setScanDone] = useState(0);
   const [scanTotal, setScanTotal] = useState(0);
   const [news, setNews] = useState<ScanReport | null>(null);
+  const [expanded, setExpanded] = useState<number | null>(null);
+  const [menu, setMenu] = useState<{ x: number; y: number; anime: Anime } | null>(null);
+  const [menuArmed, setMenuArmed] = useState(false);
 
   const reload = useCallback(async () => {
     try {
@@ -61,6 +64,7 @@ export default function App() {
       if (event.key === "Escape" && !settingsOpen) {
         setSelectedId(null);
         setCreating(false);
+        setMenu(null);
       }
     }
     window.addEventListener("keydown", onKey);
@@ -138,19 +142,24 @@ export default function App() {
     }
   }
 
-  async function runScan() {
-    const targets = library ?? [];
-    if (targets.length === 0) return;
+  function openMenu(anime: Anime, x: number, y: number) {
+    setMenuArmed(false);
+    setMenu({ x, y, anime });
+  }
+
+  async function runScan(targets?: Anime[]) {
+    const queue = targets ?? library ?? [];
+    if (queue.length === 0) return;
     if (!aiReady) {
       setSettingsOpen(true);
       return;
     }
     setScanning(true);
     setScanDone(0);
-    setScanTotal(targets.length);
+    setScanTotal(queue.length);
     setNews(null);
     const report: ScanReport = {
-      total: targets.length,
+      total: queue.length,
       checked: 0,
       requests: 0,
       changes: [],
@@ -158,7 +167,7 @@ export default function App() {
       errors: [],
     };
     try {
-      for (const anime of targets) {
+      for (const anime of queue) {
         try {
           const answer = await aiLookup(anime.title);
           report.requests += 1;
@@ -182,9 +191,9 @@ export default function App() {
           anime.seasons.some((season) => !season.cover);
         if (missing) {
           try {
+            report.requests += 1;
             const found = await anilistLookup(anime.title);
             if (found) {
-              report.requests += 1;
               const applied = await applyDetails(anime.id, {
                 author: found.author,
                 studio: found.studio,
@@ -290,15 +299,96 @@ export default function App() {
             filter={filter}
             format={format}
             query={query}
-            selectedId={selectedId}
+            expandedId={expanded}
             busy={busy}
-            onSelect={openExisting}
+            onToggle={(id) => setExpanded((prev) => (prev === id ? null : id))}
+            onMenu={openMenu}
+            onEdit={openExisting}
+            onDelete={remove}
             onAdd={openNew}
             onFormat={setFormat}
             onAdvance={(anime, season) => {
               void mutate(() => advanceSeason(anime.id, season.number));
             }}
           />
+        )}
+
+        {menu && (
+          <>
+            <div
+              className="menu-scrim"
+              onClick={() => setMenu(null)}
+              onContextMenu={(event) => {
+                event.preventDefault();
+                setMenu(null);
+              }}
+            />
+            <div
+              className="menu"
+              role="menu"
+              aria-label={`Actions for ${menu.anime.title}`}
+              style={{
+                left: Math.min(menu.x, window.innerWidth - 240),
+                top: Math.min(menu.y, window.innerHeight - 168),
+              }}
+            >
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setMenu(null);
+                  openExisting(menu.anime.id);
+                }}
+              >
+                Edit title
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  const target = menu.anime;
+                  setMenu(null);
+                  void runScan([target]);
+                }}
+              >
+                Check for new seasons
+              </button>
+              {menuArmed ? (
+                <>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="danger"
+                    disabled={busy}
+                    onClick={() => {
+                      const target = menu.anime;
+                      setMenu(null);
+                      void remove(target.id);
+                    }}
+                  >
+                    Delete “{menu.anime.title}”?
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => setMenuArmed(false)}
+                  >
+                    Keep it
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="danger"
+                  disabled={busy}
+                  onClick={() => setMenuArmed(true)}
+                >
+                  Delete title
+                </button>
+              )}
+            </div>
+          </>
         )}
 
         {(creating || selected) && (

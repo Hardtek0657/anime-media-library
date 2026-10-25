@@ -30,6 +30,10 @@ shelf remembers it.
   episode counts that grew, and fills missing details and artwork from AniList. It reports
   each change in a card.
 - A row shows one season: the one you are in. The panel holds the full list.
+- Clicking a row opens it in place: every season with its artwork, number, episode count
+  and its own `+1 ep`, plus `Edit title` and `Delete title`.
+- Right-clicking a row opens `Edit title`, `Check for new seasons` (the check for that one
+  title) and `Delete title`, which asks once before it removes anything.
 - The shelf is sorted by title, ignoring case, so the order is alphabetical rather than
   upper before lower.
 - One title per show: saving a title that already exists is refused and names the existing
