@@ -182,18 +182,23 @@ export default function App() {
       errors: [],
     };
     try {
+      // A failed title must not abandon the rest of the shelf: one bad request used to
+      // stop the whole run, which left later titles without art or details. Three
+      // failures in a row is the case where the key or the network is gone.
+      let consecutiveFailures = 0;
       for (const anime of queue) {
         try {
           const answer = await aiLookup(anime.title);
           report.requests += 1;
+          consecutiveFailures = 0;
           const change = planChange(anime, answer.seasons);
           if (change) {
             await applyScan(anime.id, change.added, change.grown);
             report.changes.push(change);
           }
         } catch (cause) {
+          consecutiveFailures += 1;
           report.errors.push(`${anime.title}: ${describe(cause)}`);
-          break;
         }
 
         // AniList answers for every title: it is keyless and it is the only source that
@@ -234,12 +239,17 @@ export default function App() {
               report.details.push({ title: anime.title, fields });
             }
           }
-        } catch {
-          // A metadata failure must not stop the season pass; the card reports seasons.
+        } catch (cause) {
+          // Keep going, but say so: a silent failure is how titles ended up with no art.
+          report.errors.push(`${anime.title}: ${describe(cause)}`);
         }
 
         report.checked += 1;
         setScanDone(report.checked);
+        if (consecutiveFailures >= 3) {
+          report.errors.push("Stopped after three failures in a row. Check the key and run it again.");
+          break;
+        }
       }
     } finally {
       setScanning(false);

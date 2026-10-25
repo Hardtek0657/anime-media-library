@@ -24,6 +24,16 @@ export function anilistLookup(title: string): Promise<AniListDetails | null> {
   return invoke<AniListDetails | null>("anilist_lookup", { title });
 }
 
+/** One call, retried once: a long check occasionally meets a rate limit or a slow answer. */
+async function lookupOnce(term: string): Promise<AniListDetails | null> {
+  try {
+    return await anilistLookup(term);
+  } catch (cause) {
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    return anilistLookup(term);
+  }
+}
+
 /**
  * A misspelling makes AniList's search return nothing, so a failed title is retried with
  * the part before a colon and then with three words. The caller gets the number of calls
@@ -37,11 +47,18 @@ export async function anilistLookupDeep(
   if (head.length >= 3 && !terms.includes(head)) terms.push(head);
   const short = title.split(/\s+/).slice(0, 3).join(" ");
   if (short.length >= 3 && !terms.includes(short)) terms.push(short);
+  // "Im Standing on a Million Lives" finds nothing; dropping the first word does. A
+  // missing apostrophe or a stray leading word is the same kind of problem.
+  const words = title.trim().split(/\s+/);
+  if (words.length >= 4) {
+    const rest = words.slice(1).join(" ");
+    if (!terms.includes(rest)) terms.push(rest);
+  }
 
   let calls = 0;
   for (const term of terms) {
     calls += 1;
-    const details = await anilistLookup(term);
+    const details = await lookupOnce(term);
     if (details) return { details, calls };
   }
   return { details: null, calls };

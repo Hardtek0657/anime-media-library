@@ -15,7 +15,7 @@ export function ScanNews({
       <div className="news-head">
         <h2 className="news-title" id="news-title">
           {report.errors.length > 0
-            ? "Library check stopped"
+            ? "Library check finished with problems"
             : found > 0
               ? "Library check found updates"
               : "Library check found nothing new"}
