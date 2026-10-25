@@ -330,9 +330,55 @@ fn search_terms(title: &str) -> Vec<String> {
     terms
 }
 
+/// One entry by id, used to walk a seasonal chain: AniList returns relations one hop at a
+/// time, so five seasons are five queries and not one.
+fn fetch_entry(client: &Client, id: i64) -> Option<Value> {
+    let response = client
+        .post(ENDPOINT)
+        .json(&json!({ "query": ID_QUERY, "variables": { "id": id } }))
+        .send()
+        .ok()?;
+    if !response.status().is_success() {
+        return None;
+    }
+    let body: Value = response.json().ok()?;
+    let media = &body["data"]["Media"];
+    media["id"].as_i64().map(|_| media.clone())
+}
+
+fn sequel_of(media: &Value) -> Option<i64> {
+    media["relations"]["edges"]
+        .as_array()?
+        .iter()
+        .find(|edge| {
+            edge["relationType"] == "SEQUEL"
+                && matches!(edge["node"]["format"].as_str(), Some("TV") | Some("TV_SHORT"))
+        })?["node"]["id"]
+        .as_i64()
+}
+
+/// The seasons in order: this entry, then every TV sequel after it.
+fn season_chain(client: &Client, media: &Value) -> Vec<Value> {
+    const MAX_CHAIN: usize = 12;
+    let mut chain = vec![media.clone()];
+    while chain.len() < MAX_CHAIN {
+        let Some(next) = sequel_of(chain.last().unwrap_or(media)) else {
+            break;
+        };
+        if chain.iter().any(|entry| entry["id"].as_i64() == Some(next)) {
+            break;
+        }
+        match fetch_entry(client, next) {
+            Some(entry) => chain.push(entry),
+            None => break,
+        }
+    }
+    chain
+}
+
 fn build_details(client: &Client, media: &Value) -> Details {
     let mut cache: HashMap<String, Option<String>> = HashMap::new();
-    let chain = ordered_chain(media);
+    let chain = season_chain(client, media);
     let mut seasons = Vec::new();
     for (index, node) in chain.iter().enumerate() {
         seasons.push(SeasonArt {

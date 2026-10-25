@@ -227,10 +227,10 @@ export type Details = {
   genres: string | null;
   description: string | null;
   cover: string | null;
-  seasons: { number: number; cover: string | null }[];
+  seasons: { number: number; episodes: number | null; cover: string | null }[];
 };
 
-export type DetailsApplied = { fields: string[]; seasonCovers: number };
+export type DetailsApplied = { fields: string[]; seasonCovers: number; seasonsAdded: number };
 
 /**
  * Fills only the columns that are still empty, so a check can run over a library the user
@@ -251,7 +251,7 @@ export async function applyDetails(
       cover: string | null;
     }[]
   >("SELECT year, author, studio, genres, description, cover FROM anime WHERE id = ?", [animeId]);
-  if (rows.length === 0) return { fields: [], seasonCovers: 0 };
+  if (rows.length === 0) return { fields: [], seasonCovers: 0, seasonsAdded: 0 };
   const current = rows[0];
 
   const candidates: [keyof Omit<Details, "seasons">, string | number | null][] = [
@@ -311,7 +311,24 @@ export async function applyDetails(
       seasonCovers += 1;
     }
   }
-  return { fields: filled, seasonCovers };
+  // The chain knows every season; a name check may have stopped short. Add what the table
+  // does not hold yet, at zero watched, and never touch an existing row.
+  const held = await conn.select<{ number: number }[]>(
+    "SELECT number FROM season WHERE anime_id = ?",
+    [animeId],
+  );
+  const heldNumbers = new Set(held.map((row) => row.number));
+  let seasonsAdded = 0;
+  for (const season of details.seasons) {
+    if (season.episodes === null || heldNumbers.has(season.number)) continue;
+    await conn.execute(
+      "INSERT INTO season (anime_id, number, episode_count, episodes_watched) VALUES (?, ?, ?, 0)",
+      [animeId, season.number, season.episodes],
+    );
+    seasonsAdded += 1;
+  }
+
+  return { fields: filled, seasonCovers, seasonsAdded };
 }
 
 export async function advanceSeason(

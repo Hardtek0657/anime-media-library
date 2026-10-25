@@ -227,10 +227,16 @@ export default function App() {
               cover: found.cover,
               seasons: found.seasons.map((season) => ({
                 number: season.number,
+                episodes: season.episodes,
                 cover: season.cover,
               })),
             });
             const fields = [...applied.fields];
+            if (applied.seasonsAdded > 0) {
+              fields.push(
+                `${applied.seasonsAdded} missing ${applied.seasonsAdded === 1 ? "season" : "seasons"}`,
+              );
+            }
             if (applied.seasonCovers > 0) {
               fields.push(
                 `${applied.seasonCovers} season ${applied.seasonCovers === 1 ? "cover" : "covers"}`,
