@@ -18,6 +18,12 @@ function seasonCount(count: number): string {
   return count === 1 ? "1 season" : `${count} seasons`;
 }
 
+function seasonList(numbers: number[]): string {
+  const labels = numbers.map((number) => `season ${number}`);
+  if (labels.length === 1) return labels[0];
+  return `${labels.slice(0, -1).join(", ")} and ${labels[labels.length - 1]}`;
+}
+
 type SeasonRow = {
   key: string;
   number: string;
@@ -105,23 +111,67 @@ export function DetailPanel({
         setDescription(answer.description);
         filled.push("description");
       }
-      if (!anime && answer.seasons.length > 0) {
-        setRows(
-          answer.seasons.map((season) => ({
-            key: `ai-${nextRowKey++}`,
-            number: String(season.number),
-            count: String(season.episodes),
-            watched: "0",
-          })),
-        );
-        filled.push(seasonCount(answer.seasons.length));
+
+      let seasonsNote = "";
+      if (answer.seasons.length > 0) {
+        if (!anime) {
+          setRows(
+            answer.seasons.map((season) => ({
+              key: `ai-${nextRowKey++}`,
+              number: String(season.number),
+              count: String(season.episodes),
+              watched: "0",
+            })),
+          );
+          filled.push(seasonCount(answer.seasons.length));
+        } else {
+          // A saved title keeps its watch progress: counts follow the suggestion, watched
+          // values are preserved (clamped), missing seasons are added, unknown rows stay.
+          const suggested = new Map(answer.seasons.map((season) => [season.number, season]));
+          let countsChanged = 0;
+          const merged = rows.map((row) => {
+            const season = suggested.get(Number(row.number));
+            if (!season) return row;
+            const watched = Math.min(Number(row.watched) || 0, season.episodes);
+            const next = {
+              ...row,
+              count: String(season.episodes),
+              watched: String(watched),
+            };
+            if (Number(row.count) !== season.episodes) countsChanged += 1;
+            return next;
+          });
+          const missing = answer.seasons.filter(
+            (season) => !rows.some((row) => Number(row.number) === season.number),
+          );
+          merged.push(
+            ...missing.map((season) => ({
+              key: `ai-${nextRowKey++}`,
+              number: String(season.number),
+              count: String(season.episodes),
+              watched: "0",
+            })),
+          );
+          setRows(merged);
+
+          const parts: string[] = [];
+          if (missing.length > 0) parts.push(`added ${seasonList(missing.map((s) => s.number))}`);
+          if (countsChanged > 0) {
+            parts.push(
+              countsChanged === 1 ? "updated 1 episode count" : `updated ${countsChanged} episode counts`,
+            );
+          }
+          seasonsNote =
+            parts.length > 0
+              ? `${sentenceCase(parts.join(", and "))}. Watch progress kept.`
+              : "Seasons already match DeepSeek's list; watch progress kept.";
+        }
       }
-      const kept =
-        anime !== null && answer.seasons.length > 0 ? " Existing seasons left as they are." : "";
+
       setAiNote(
-        filled.length > 0
-          ? `${sentenceCase(filled.join(", "))} filled from DeepSeek. Review before saving.${kept}`
-          : `Nothing new to fill; those fields already have values.${kept}`,
+        [filled.length > 0 ? `${sentenceCase(filled.join(", "))} filled from DeepSeek.` : "", seasonsNote]
+          .filter(Boolean)
+          .join(" ") || "Nothing new to fill; those fields already have values.",
       );
     } catch (cause) {
       setAiProblem(cause instanceof Error ? cause.message : String(cause));

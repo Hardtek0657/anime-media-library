@@ -71,8 +71,11 @@ without a key.
 - What comes back: a JSON object with year, format, seasons and a short description. The
   Rust side validates every field, drops impossible values (year outside 1900 to 2100, zero
   episodes, duplicate season numbers) and caps the season list.
-- What it changes: empty fields only. A new title gets the suggested seasons; editing an
-  existing title never replaces the seasons you already logged.
+- What it changes: year, format and description only where they are empty. Seasons are
+  merged: a new title gets the suggested list, and a saved title keeps its rows while
+  missing seasons are added, episode counts follow the suggestion, and watch progress is
+  preserved (clamped if the suggested count is smaller). A season the model does not mention
+  is left alone.
 - Failures are shown in the panel: a rejected key, no balance, rate limiting, a network
   error, or a reply that is not the expected JSON.
 
