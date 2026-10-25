@@ -251,23 +251,29 @@ export function CatalogList({
                 )}
                 {anime.seasons.map((season) => {
                   const done = isSeasonDone(season);
+                  const meta: string[] = [anime.format];
+                  if (anime.year) meta.push(String(anime.year));
+                  meta.push(`${season.episodeCount} ${season.episodeCount === 1 ? "episode" : "episodes"}`);
                   return (
-                    <div className="season-line" key={season.number}>
+                    <div className="season-row" key={season.number}>
                       {season.cover || anime.cover ? (
                         <img
-                          className="season-art"
+                          className="row-art"
                           src={season.cover ?? anime.cover ?? ""}
                           alt=""
                           loading="lazy"
                         />
                       ) : (
-                        <span className="season-art empty" aria-hidden="true" />
+                        <span className="row-art empty" aria-hidden="true" />
                       )}
-                      <span className="season-tag">S{season.number}</span>
-                      <span className="season-count">
-                        {season.episodesWatched} of {season.episodeCount} episodes
+                      <span className="row-main">
+                        <span className="row-title">Season {season.number}</span>
+                        <span className="row-meta">{meta.join(" · ")}</span>
                       </span>
-                      <span className="season-action">
+                      <span className="row-seasons">
+                        <SeasonStrip season={season} />
+                      </span>
+                      <span className="row-action">
                         {done ? (
                           <span className="row-done">Done</span>
                         ) : (
