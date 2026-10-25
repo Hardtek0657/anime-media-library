@@ -161,6 +161,29 @@ export async function setWatched(
   );
 }
 
+/** Applies what a library check found: new seasons, and episode counts that grew. */
+export async function applyScan(
+  animeId: number,
+  added: { number: number; episodes: number }[],
+  grown: { number: number; to: number }[],
+): Promise<void> {
+  // ponytail: same non-transactional shape as saveAnime. A failure midway leaves the
+  // additions before it applied; rerunning a check is safe because it only ever adds.
+  const conn = await db();
+  for (const season of added) {
+    await conn.execute(
+      "INSERT INTO season (anime_id, number, episode_count, episodes_watched) VALUES (?, ?, ?, 0)",
+      [animeId, season.number, season.episodes],
+    );
+  }
+  for (const season of grown) {
+    await conn.execute(
+      "UPDATE season SET episode_count = ? WHERE anime_id = ? AND number = ?",
+      [season.to, animeId, season.number],
+    );
+  }
+}
+
 export async function advanceSeason(
   animeId: number,
   number: number,

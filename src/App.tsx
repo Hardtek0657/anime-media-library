@@ -1,15 +1,18 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CatalogList, FilterRail } from "./Catalog";
 import { DetailPanel } from "./DetailPanel";
+import { ScanNews } from "./ScanNews";
 import { SettingsDialog } from "./SettingsDialog";
-import { aiHasKey } from "./lib/ai";
+import { aiHasKey, aiLookup } from "./lib/ai";
 import {
   advanceSeason,
+  applyScan,
   deleteAnime as removeAnime,
   loadLibrary,
   saveAnime as persistAnime,
   type AnimeDraft,
 } from "./lib/db";
+import { planChange, type ScanReport } from "./lib/scan";
 import { statusOf, type Anime, type AnimeFormat, type Filter, type Season } from "./lib/model";
 
 function describe(cause: unknown): string {
@@ -27,6 +30,10 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [aiReady, setAiReady] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [scanning, setScanning] = useState(false);
+  const [scanDone, setScanDone] = useState(0);
+  const [scanTotal, setScanTotal] = useState(0);
+  const [news, setNews] = useState<ScanReport | null>(null);
 
   const reload = useCallback(async () => {
     try {
@@ -129,6 +136,48 @@ export default function App() {
     }
   }
 
+  async function runScan() {
+    const targets = library ?? [];
+    if (targets.length === 0) return;
+    if (!aiReady) {
+      setSettingsOpen(true);
+      return;
+    }
+    setScanning(true);
+    setScanDone(0);
+    setScanTotal(targets.length);
+    setNews(null);
+    const report: ScanReport = {
+      total: targets.length,
+      checked: 0,
+      requests: 0,
+      changes: [],
+      errors: [],
+    };
+    try {
+      for (const anime of targets) {
+        try {
+          const answer = await aiLookup(anime.title);
+          report.requests += 1;
+          const change = planChange(anime, answer.seasons);
+          if (change) {
+            await applyScan(anime.id, change.added, change.grown);
+            report.changes.push(change);
+          }
+        } catch (cause) {
+          report.errors.push(`${anime.title}: ${describe(cause)}`);
+          break;
+        }
+        report.checked += 1;
+        setScanDone(report.checked);
+      }
+    } finally {
+      setScanning(false);
+      setNews(report);
+      await reload();
+    }
+  }
+
   return (
     <div className="app">
       <header className="masthead">
@@ -144,6 +193,14 @@ export default function App() {
           placeholder="Filter titles"
           aria-label="Filter titles"
         />
+        <button
+          type="button"
+          className="btn"
+          disabled={scanning || library === null}
+          onClick={() => void runScan()}
+        >
+          {scanning ? `Checking ${scanDone} of ${scanTotal}…` : "Check library"}
+        </button>
         <button type="button" className="btn" onClick={() => setSettingsOpen(true)}>
           AI settings
         </button>
@@ -151,6 +208,8 @@ export default function App() {
           Add title
         </button>
       </header>
+
+      {news && <ScanNews report={news} onDismiss={() => setNews(null)} />}
 
       {error && (
         <div className="banner" role="alert">

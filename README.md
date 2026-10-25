@@ -22,6 +22,8 @@ shelf remembers it.
 - Optional DeepSeek fill: with a key added, one button fills the year, format, seasons and
   description from the title. Off by default, and it is the only feature that uses the
   network.
+- `Check library` asks DeepSeek about every title, adds seasons you are missing, raises
+  episode counts that grew, and reports each change in a card.
 - A row shows one season: the one you are in. The panel holds the full list.
 - The shelf is sorted by title, ignoring case, so the order is alphabetical rather than
   upper before lower.
@@ -91,6 +93,21 @@ without a key.
 
 The provider is one constant pair (`ENDPOINT` and `MODEL` in `src-tauri/src/ai.rs`), so
 another OpenAI-compatible endpoint is a config change rather than a rewrite.
+
+## Checking the library
+
+`Check library` in the header walks every title and asks DeepSeek about it: one request per
+title, shown as `Checking 2 of 5…` while it runs.
+
+- It only adds. A season you do not have is inserted with its episode count; a season whose
+  suggested count is higher is raised. Nothing is deleted, no count is lowered, watch
+  progress is never touched.
+- The card above the shelf reports titles checked, requests made, and per title what was
+  added or raised. `Dismiss` closes it.
+- A failure stops the run and the error appears in the card, keeping whatever was applied
+  before it. Running it again is safe, because the check only adds.
+- A new movie or spin-off is its own title, so it is not added automatically; the card says
+  so.
 
 ## Schema
 
@@ -166,6 +183,11 @@ Checked in the running app on Windows (WebView2 155), not only in a browser:
   Check it in AI settings." in the panel, with the draft untouched.
 - A description typed in the panel saved, reopened with the same text, and the temporary
   title was deleted afterwards.
+- `Check library` with a deliberately incomplete `Mushoku Tensei` entry (one season at 12
+  episodes) made 5 requests and reported "added S2 (25 eps). grew S1 12 to 23 eps."; that
+  entry then held 23 and 25 episodes.
+- The four accurate titles in the same run produced no changes, so the card only lists real
+  findings, and dismissing it left the shelf as it was.
 - `pnpm tauri build` produced a working bundle, and the packaged executable opened the same
   library from the same database file.
 
