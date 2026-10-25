@@ -246,32 +246,35 @@ export function DetailPanel({
         setAiProblem("AniList has no match for that title.");
         return;
       }
+      // Choosing an entry is a decision: it replaces the metadata that came from the
+      // other one. A plain fetch still only fills what is empty.
+      const overwrite = candidateId !== undefined;
       const filled: string[] = [];
-      if (!year && found.year) {
+      if (found.year && (overwrite || !year)) {
         setYear(String(found.year));
         filled.push("year");
       }
-      if (!anime && found.format !== format) {
+      if (found.format !== format && (overwrite || !anime)) {
         setFormat(found.format as AnimeFormat);
         filled.push("format");
       }
-      if (!description.trim() && found.description) {
+      if (found.description && (overwrite || !description.trim())) {
         setDescription(found.description);
         filled.push("description");
       }
-      if (!author.trim() && found.author) {
+      if (found.author && (overwrite || !author.trim())) {
         setAuthor(found.author);
         filled.push("author");
       }
-      if (!studio.trim() && found.studio) {
+      if (found.studio && (overwrite || !studio.trim())) {
         setStudio(found.studio);
         filled.push("studio");
       }
-      if (!genres.trim() && found.genres) {
+      if (found.genres && (overwrite || !genres.trim())) {
         setGenres(found.genres);
         filled.push("genres");
       }
-      if (!cover && found.cover) {
+      if (found.cover && (overwrite || !cover)) {
         setCover(found.cover);
         filled.push("artwork");
       }
@@ -282,7 +285,7 @@ export function DetailPanel({
       // not, the series cover is used instead of nothing.
       const matched = found.seasons.length === rows.length;
       const next = rows.map((row) => {
-        if (row.cover) return row;
+        if (row.cover && !overwrite) return row;
         const url = matched ? byNumber.get(Number(row.number)) ?? null : found.cover;
         if (!url) return row;
         seasonArt += 1;
@@ -294,7 +297,9 @@ export function DetailPanel({
       if (seasonArt > 0) parts.push(`${seasonArt} season ${seasonArt === 1 ? "cover" : "covers"}`);
       setAiNote(
         parts.length > 0
-          ? `${sentenceCase(parts.join(", "))} filled from AniList. Review before saving.`
+          ? `${sentenceCase(parts.join(", "))} ${
+              overwrite ? "replaced from" : "filled from"
+            } AniList. Review before saving.`
           : "Those fields already have values; AniList added nothing.",
       );
     } catch (cause) {
