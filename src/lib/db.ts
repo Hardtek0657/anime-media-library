@@ -74,6 +74,9 @@ export async function saveAnime(
   seasons: Season[],
   removed: number[],
 ): Promise<number> {
+  // ponytail: these statements are not one transaction. A failure halfway leaves a
+  // title with fewer seasons than the form showed, fixable by editing it again. Use a
+  // Rust command with a real transaction when partial saves start losing real work.
   const conn = await db();
   const values = [
     draft.title.trim(),
@@ -93,6 +96,7 @@ export async function saveAnime(
     );
     animeId = inserted[0].id;
   } else {
+
     await conn.execute(
       "UPDATE anime SET title = ?, year = ?, format = ?, notes = ? WHERE id = ?",
       [...values, animeId],
