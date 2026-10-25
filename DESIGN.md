@@ -59,6 +59,10 @@ cover source, and inventing posters would be fabricated content.
 - Centre: rows. Title and metadata left, season strips and the quick `+1` right.
 - Right: a 372 px edit panel, full height. It is a form, not a modal, so the shelf stays
   visible while editing.
+- Format chips sit in the list header, right of the count: one `All formats` plus one chip
+  per format the library actually holds, so the control never offers a shelf that would be
+  empty. Chips rather than a select because there are at most five options and the current
+  choice stays readable at a glance.
 - Season detail on a row: exactly one strip, the season you are in. That is the furthest
   season with progress and episodes left, otherwise the first unfinished season, otherwise
   the last season once everything is watched. The full list lives in the panel. One strip

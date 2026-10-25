@@ -10,7 +10,7 @@ import {
   saveAnime as persistAnime,
   type AnimeDraft,
 } from "./lib/db";
-import { statusOf, type Anime, type Filter, type Season } from "./lib/model";
+import { statusOf, type Anime, type AnimeFormat, type Filter, type Season } from "./lib/model";
 
 function describe(cause: unknown): string {
   return cause instanceof Error ? cause.message : String(cause);
@@ -20,6 +20,7 @@ export default function App() {
   const [library, setLibrary] = useState<Anime[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
+  const [format, setFormat] = useState<AnimeFormat | "all">("all");
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [creating, setCreating] = useState(false);
@@ -61,9 +62,16 @@ export default function App() {
     const needle = query.trim().toLowerCase();
     return (library ?? []).filter((anime) => {
       if (filter !== "all" && statusOf(anime) !== filter) return false;
+      if (format !== "all" && anime.format !== format) return false;
       return needle === "" || anime.title.toLowerCase().includes(needle);
     });
-  }, [library, filter, query]);
+  }, [library, filter, format, query]);
+
+  /** The rail counts follow the format, so a shelf count always matches what it opens. */
+  const formatScope = useMemo(
+    () => (library ?? []).filter((anime) => format === "all" || anime.format === format),
+    [library, format],
+  );
 
   const selected = library?.find((anime) => anime.id === selectedId) ?? null;
 
@@ -154,7 +162,7 @@ export default function App() {
       )}
 
       <div className="workspace">
-        <FilterRail library={library ?? []} filter={filter} onChange={setFilter} />
+        <FilterRail library={formatScope} filter={filter} onChange={setFilter} />
         {library === null ? (
           <div className="list">
             <div className="state">
@@ -178,11 +186,13 @@ export default function App() {
             library={library}
             visible={visible}
             filter={filter}
+            format={format}
             query={query}
             selectedId={selectedId}
             busy={busy}
             onSelect={openExisting}
             onAdd={openNew}
+            onFormat={setFormat}
             onAdvance={(anime, season) => {
               void mutate(() => advanceSeason(anime.id, season.number));
             }}

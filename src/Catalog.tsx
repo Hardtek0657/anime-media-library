@@ -1,4 +1,5 @@
 import {
+  FORMATS,
   STATUS_LABEL,
   currentSeason,
   episodeTotal,
@@ -8,6 +9,7 @@ import {
   spineColor,
   statusOf,
   type Anime,
+  type AnimeFormat,
   type Filter,
   type Season,
 } from "./lib/model";
@@ -83,45 +85,28 @@ export function CatalogList({
   library,
   visible,
   filter,
+  format,
   query,
   selectedId,
   busy,
   onSelect,
   onAdd,
   onAdvance,
+  onFormat,
 }: {
   library: Anime[];
   visible: Anime[];
   filter: Filter;
+  format: AnimeFormat | "all";
   query: string;
   selectedId: number | null;
   busy: boolean;
   onSelect: (id: number) => void;
   onAdd: () => void;
   onAdvance: (anime: Anime, season: Season) => void;
+  onFormat: (format: AnimeFormat | "all") => void;
 }) {
-  if (visible.length === 0) {
-    const narrowed = library.length > 0;
-    return (
-      <div className="list">
-        <div className="state">
-          <h2 className="state-title">
-            {narrowed ? "Nothing matches that filter." : "Nothing on the shelf yet."}
-          </h2>
-          <p className="state-note">
-            {narrowed
-              ? "Clear the search or pick another shelf to see the rest of the library."
-              : "Add a title, give it a season, and log where you stopped."}
-          </p>
-          {!narrowed && (
-            <button type="button" className="btn primary" onClick={onAdd}>
-              Add your first title
-            </button>
-          )}
-        </div>
-      </div>
-    );
-  }
+  const formats = FORMATS.filter((format) => library.some((anime) => anime.format === format));
 
   return (
     <div className="list">
@@ -129,9 +114,50 @@ export function CatalogList({
         <span>
           {visible.length} {visible.length === 1 ? "title" : "titles"}
           {filter !== "all" ? ` · ${STATUS_LABEL[filter]}` : ""}
+          {format !== "all" ? ` · ${format}` : ""}
           {query.trim() ? ` · matching “${query.trim()}”` : ""}
         </span>
+        {formats.length > 0 && (
+          <span className="format-bar" role="group" aria-label="Filter by format">
+            <button
+              type="button"
+              className="chip"
+              aria-pressed={format === "all"}
+              onClick={() => onFormat("all")}
+            >
+              All formats
+            </button>
+            {formats.map((entry) => (
+              <button
+                key={entry}
+                type="button"
+                className="chip"
+                aria-pressed={format === entry}
+                onClick={() => onFormat(entry)}
+              >
+                {entry}
+              </button>
+            ))}
+          </span>
+        )}
       </div>
+      {visible.length === 0 && (
+        <div className="state">
+          <h2 className="state-title">
+            {library.length > 0 ? "Nothing matches that filter." : "Nothing on the shelf yet."}
+          </h2>
+          <p className="state-note">
+            {library.length > 0
+              ? "Clear the search, pick another shelf, or widen the format."
+              : "Add a title, give it a season, and log where you stopped."}
+          </p>
+          {library.length === 0 && (
+            <button type="button" className="btn primary" onClick={onAdd}>
+              Add your first title
+            </button>
+          )}
+        </div>
+      )}
       {visible.map((anime) => {
         const next = nextUnfinished(anime);
         const shown = currentSeason(anime);

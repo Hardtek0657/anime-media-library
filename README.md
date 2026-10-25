@@ -17,11 +17,14 @@ shelf remembers it.
   with its own episode progress.
 - Quick `+1 ep` from the shelf, or set any episode number in the detail panel.
 - Derived status per title, so nothing drifts out of sync.
-- Filters: all, watching, completed, not started. Title search.
+- Filters: all, watching, completed, not started, plus format chips (TV, Movie, OVA, ONA,
+  Special) for the formats you actually own. Title search.
 - Optional DeepSeek fill: with a key added, one button fills the year, format, seasons and
   description from the title. Off by default, and it is the only feature that uses the
   network.
 - A row shows one season: the one you are in. The panel holds the full list.
+- The shelf is sorted by title, ignoring case, so the order is alphabetical rather than
+  upper before lower.
 - One title per show: saving a title that already exists is refused and names the existing
   entry, and a near miss (a typo) asks "same show?" before the AI request goes out.
 - Every title stored in a local SQLite database. Deleting a title deletes its seasons.
@@ -145,6 +148,11 @@ Checked in the running app on Windows (WebView2 155), not only in a browser:
 - A row renders exactly one season and stays 69 px tall whatever the season count. With
   season 1 finished, season 2 at 5 of 12 and season 3 untouched, the row showed `S2 5/12`;
   with every episode watched it showed the last season, `S3 12/12`.
+- Order with a temporary `Aaa Temp Show` and `Zzz Temp Movie` was Aaa, Absolute Duo,
+  Arifureta, Zzz, which is case-insensitive alphabetical rather than upper-before-lower.
+- With a TV and a Movie title present, the header showed `All formats`, `TV` and `Movie`.
+  Picking `Movie` left only that row, the count read `1 title · Movie`, and the shelf counts
+  followed (All 1, Not started 1). Returning to `All formats` restored both rows.
 - Adding a title that already exists, `absolute duo` in different case, was refused with
   "“Absolute Duo” is already on the shelf. Open that entry instead." and no row was created.
 - A season numbered 2.5 saved, showed as S2.5 with its own 6 of 12 progress, and survived a
