@@ -86,6 +86,9 @@ because the row content would otherwise be squeezed below a usable width.
   tooltip; the reason is text the user can read, and the way out is one click.
 - Everything the model returns is treated as a draft: impossible values are dropped in Rust
   before they reach the form, and failures print in the same `.problem` style as validation.
+- A near duplicate is caught before the request, not after: the panel names the existing
+  title and offers to open it or to continue. Checking first means the shelf cannot grow a
+  second row for one show, and the user pays for no request to find that out.
 
 ## Deliberate omissions
 

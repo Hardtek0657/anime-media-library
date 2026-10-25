@@ -195,7 +195,9 @@ export default function App() {
             anime={creating ? null : selected}
             busy={busy}
             aiReady={aiReady}
+            library={library ?? []}
             onOpenSettings={() => setSettingsOpen(true)}
+            onOpenExisting={openExisting}
             onClose={closePanel}
             onSave={save}
             onDelete={remove}

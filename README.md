@@ -23,7 +23,7 @@ shelf remembers it.
   network.
 - A row shows one season: the one you are in. The panel holds the full list.
 - One title per show: saving a title that already exists is refused and names the existing
-  entry.
+  entry, and a near miss (a typo) asks "same show?" before the AI request goes out.
 - Every title stored in a local SQLite database. Deleting a title deletes its seasons.
 
 ## Stack
@@ -79,6 +79,10 @@ without a key.
   missing seasons are added, episode counts follow the suggestion, and watch progress is
   preserved (clamped if the suggested count is smaller). A season the model does not mention
   is left alone.
+- Before any request, the title is compared with the shelf. Within one edit per seven
+  characters of an existing title, the panel stops and asks whether it is the same show,
+  offering `Open that entry` or `Different title, fill anyway`. Nothing is sent until that
+  is answered.
 - Failures are shown in the panel: a rejected key, no balance, rate limiting, a network
   error, or a reply that is not the expected JSON.
 

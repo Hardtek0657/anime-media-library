@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { aiLookup } from "./lib/ai";
 import type { AnimeDraft } from "./lib/db";
+import { findSimilarTitle } from "./lib/similar";
 import {
   FORMATS,
   episodeTotal,
@@ -51,7 +52,9 @@ export function DetailPanel({
   anime,
   busy,
   aiReady,
+  library,
   onOpenSettings,
+  onOpenExisting,
   onClose,
   onSave,
   onDelete,
@@ -59,7 +62,9 @@ export function DetailPanel({
   anime: Anime | null;
   busy: boolean;
   aiReady: boolean;
+  library: Anime[];
   onOpenSettings: () => void;
+  onOpenExisting: (id: number) => void;
   onClose: () => void;
   onSave: (
     id: number | null,
@@ -80,19 +85,30 @@ export function DetailPanel({
   const [aiBusy, setAiBusy] = useState(false);
   const [aiNote, setAiNote] = useState<string | null>(null);
   const [aiProblem, setAiProblem] = useState<string | null>(null);
+  const [similar, setSimilar] = useState<Anime | null>(null);
   const titleRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     titleRef.current?.focus();
   }, []);
 
-  async function fillFromAi() {
+  async function fillFromAi(force = false) {
     const cleanTitle = title.trim();
     if (!cleanTitle) {
       setAiProblem("Type the title first.");
       titleRef.current?.focus();
       return;
     }
+    if (!force) {
+      const match = findSimilarTitle(cleanTitle, library, anime?.id ?? null);
+      if (match) {
+        setSimilar(match);
+        setAiNote(null);
+        setAiProblem(null);
+        return;
+      }
+    }
+    setSimilar(null);
     setAiBusy(true);
     setAiProblem(null);
     setAiNote(null);
@@ -298,7 +314,10 @@ export function DetailPanel({
         <input
           ref={titleRef}
           value={title}
-          onChange={(event) => setTitle(event.target.value)}
+          onChange={(event) => {
+            setTitle(event.target.value);
+            setSimilar(null);
+          }}
           placeholder="e.g. Frieren: Beyond Journey's End"
           aria-invalid={problem === "A title is required." ? true : undefined}
         />
@@ -328,6 +347,25 @@ export function DetailPanel({
           </p>
         )}
         {aiNote && <p className="hint">{aiNote}</p>}
+        {similar && (
+          <div className="notice" role="alert">
+            <p>
+              You already have “{similar.title}”. Is this the same show?
+            </p>
+            <div className="notice-actions">
+              <button
+                type="button"
+                className="btn"
+                onClick={() => onOpenExisting(similar.id)}
+              >
+                Open that entry
+              </button>
+              <button type="button" className="link" onClick={() => void fillFromAi(true)}>
+                Different title, fill anyway
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="field-pair">
