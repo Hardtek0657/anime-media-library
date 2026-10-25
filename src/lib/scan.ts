@@ -9,11 +9,17 @@ export type ScanChange = {
   grown: SeasonGrow[];
 };
 
+export type ScanDetails = {
+  title: string;
+  fields: string[];
+};
+
 export type ScanReport = {
   total: number;
   checked: number;
   requests: number;
   changes: ScanChange[];
+  details: ScanDetails[];
   errors: string[];
 };
 

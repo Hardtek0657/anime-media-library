@@ -4,8 +4,10 @@ import { DetailPanel } from "./DetailPanel";
 import { ScanNews } from "./ScanNews";
 import { SettingsDialog } from "./SettingsDialog";
 import { aiHasKey, aiLookup } from "./lib/ai";
+import { anilistLookup } from "./lib/anilist";
 import {
   advanceSeason,
+  applyDetails,
   applyScan,
   deleteAnime as removeAnime,
   loadLibrary,
@@ -152,6 +154,7 @@ export default function App() {
       checked: 0,
       requests: 0,
       changes: [],
+      details: [],
       errors: [],
     };
     try {
@@ -168,6 +171,46 @@ export default function App() {
           report.errors.push(`${anime.title}: ${describe(cause)}`);
           break;
         }
+
+        // Artwork and creator fields come from AniList, only when something is missing,
+        // so a curated library costs no extra requests.
+        const missing =
+          !anime.author ||
+          !anime.studio ||
+          !anime.genres ||
+          !anime.cover ||
+          anime.seasons.some((season) => !season.cover);
+        if (missing) {
+          try {
+            const found = await anilistLookup(anime.title);
+            if (found) {
+              report.requests += 1;
+              const applied = await applyDetails(anime.id, {
+                author: found.author,
+                studio: found.studio,
+                genres: found.genres,
+                description: found.description,
+                cover: found.cover,
+                seasons: found.seasons.map((season) => ({
+                  number: season.number,
+                  cover: season.cover,
+                })),
+              });
+              const fields = [...applied.fields];
+              if (applied.seasonCovers > 0) {
+                fields.push(
+                  `${applied.seasonCovers} season ${applied.seasonCovers === 1 ? "cover" : "covers"}`,
+                );
+              }
+              if (fields.length > 0) {
+                report.details.push({ title: anime.title, fields });
+              }
+            }
+          } catch {
+            // A metadata failure must not stop the season pass; the card reports seasons.
+          }
+        }
+
         report.checked += 1;
         setScanDone(report.checked);
       }

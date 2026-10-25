@@ -19,11 +19,16 @@ shelf remembers it.
 - Derived status per title, so nothing drifts out of sync.
 - Filters: all, watching, completed, not started, plus format chips (TV, Movie, OVA, ONA,
   Special) for the formats you actually own. Title search.
+- Cover art per title and per season, stored as a data URI in the same database file.
+- Author, studio and genres alongside year and format.
 - Optional DeepSeek fill: with a key added, one button fills the year, format, seasons and
   description from the title. Off by default, and it is the only feature that uses the
   network.
+- `Fetch artwork and details` pulls covers and creator fields from AniList, which needs no
+  key.
 - `Check library` asks DeepSeek about every title, adds seasons you are missing, raises
-  episode counts that grew, and reports each change in a card.
+  episode counts that grew, and fills missing details and artwork from AniList. It reports
+  each change in a card.
 - A row shows one season: the one you are in. The panel holds the full list.
 - The shelf is sorted by title, ignoring case, so the order is alphabetical rather than
   upper before lower.
@@ -39,6 +44,7 @@ shelf remembers it.
 | UI | React 19, TypeScript, Vite |
 | Storage | SQLite through `tauri-plugin-sql`, migrations declared in Rust |
 | Optional AI | Rust command calling DeepSeek; the key lives in the Windows Credential Manager |
+| Artwork and facts | AniList public GraphQL, called from Rust, no key required |
 
 ## Run it
 
@@ -93,6 +99,21 @@ without a key.
 
 The provider is one constant pair (`ENDPOINT` and `MODEL` in `src-tauri/src/ai.rs`), so
 another OpenAI-compatible endpoint is a config change rather than a rewrite.
+
+## Artwork and creator fields
+
+A text model cannot return images, so covers come from AniList's public API, which needs no
+key and receives only the title. The Rust side downloads the image, refuses anything over
+400 KB, and stores it as a `data:image/...;base64,...` URI in `anime.cover` and
+`season.cover`. That keeps the library one file to back up; a typical cover adds 35 to
+75 KB.
+
+- `Fetch artwork and details` fills only empty fields: year, format, description, author,
+  studio, genres and covers.
+- Season art is used only when AniList's relation chain matches the number of seasons you
+  have. Otherwise every season uses the series cover, which is honest about what is known
+  and stops the check asking again.
+- Nothing is overwritten. A creator or description you typed stays as you typed it.
 
 ## Checking the library
 

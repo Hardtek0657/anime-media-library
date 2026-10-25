@@ -102,8 +102,10 @@ because the row content would otherwise be squeezed below a usable width.
 - **No light theme.** The owner chose the dark shelf, and a second theme would need a full
   contrast and state pass to be honest (R-34). One verified theme now, a toggle later only
   if it is asked for.
-- **No cover images.** There is no metadata source, so any artwork would be fabricated
-  (R-23, R-38).
+- **Covers come from AniList, not from the model.** A text model cannot return image bytes,
+  and a URL it invents would often 404 or point at the wrong show. A real metadata source
+  gives real art (R-23). A title without art keeps the monogram tile, so the shelf never
+  shows a broken frame.
 - **No icon set.** Text labels and the spine motif carry the navigation; a generic icon
   library would add a look without information (R-04).
 - **No gradient, glow, glass or shadow on the chrome.** The only depth is one border colour

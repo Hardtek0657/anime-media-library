@@ -601,13 +601,38 @@ textarea {
 
 .season-edit {
   display: grid;
-  grid-template-columns: 62px 1fr 1fr auto;
+  grid-template-columns: 30px 62px 1fr 1fr auto;
   gap: 8px;
   align-items: end;
   padding: 8px;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 4px;
+}
+
+.season-art {
+  width: 30px;
+  height: 44px;
+  object-fit: cover;
+  border-radius: 2px;
+  border: 1px solid var(--line);
+}
+
+.season-art.empty {
+  background: var(--surface-2);
+}
+
+.row-art {
+  width: 30px;
+  height: 44px;
+  object-fit: cover;
+  border-radius: 3px;
+  border: 1px solid var(--line);
+  justify-self: center;
+}
+
+.season-art {
+  align-self: center;
 }
 
 .inline-field {

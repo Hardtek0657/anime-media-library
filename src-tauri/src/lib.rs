@@ -1,4 +1,5 @@
 mod ai;
+mod anilist;
 
 use tauri_plugin_sql::{Migration, MigrationKind};
 
@@ -17,6 +18,12 @@ pub fn run() {
             sql: include_str!("../migrations/002_anime_description.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 3,
+            description: "anime_details_and_art",
+            sql: include_str!("../migrations/003_details_and_art.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     // This URL must stay identical to DB_URL in src/lib/db.ts. The plugin maps the name
@@ -33,6 +40,7 @@ pub fn run() {
             ai::ai_set_key,
             ai::ai_clear_key,
             ai::ai_lookup,
+            anilist::anilist_lookup,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

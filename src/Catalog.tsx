@@ -173,13 +173,22 @@ export function CatalogList({
               style={{ background: spineColor(anime.title) }}
               aria-hidden="true"
             />
-            <span
-              className="monogram"
-              style={{ color: spineColor(anime.title) }}
-              aria-hidden="true"
-            >
-              {monogram(anime.title)}
-            </span>
+            {shown?.cover || anime.cover ? (
+              <img
+                className="row-art"
+                src={shown?.cover ?? anime.cover ?? ""}
+                alt=""
+                loading="lazy"
+              />
+            ) : (
+              <span
+                className="monogram"
+                style={{ color: spineColor(anime.title) }}
+                aria-hidden="true"
+              >
+                {monogram(anime.title)}
+              </span>
+            )}
             <span className="row-main">
               <button
                 type="button"

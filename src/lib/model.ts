@@ -6,6 +6,7 @@ export type Season = {
   number: number;
   episodeCount: number;
   episodesWatched: number;
+  cover: string | null;
 };
 
 export type Anime = {
@@ -15,6 +16,10 @@ export type Anime = {
   format: AnimeFormat;
   notes: string | null;
   description: string | null;
+  author: string | null;
+  studio: string | null;
+  genres: string | null;
+  cover: string | null;
   seasons: Season[];
 };
 

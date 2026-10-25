@@ -7,7 +7,7 @@ export function ScanNews({
   report: ScanReport;
   onDismiss: () => void;
 }) {
-  const found = report.changes.length;
+  const found = report.changes.length + report.details.length;
   return (
     <section className="news" aria-labelledby="news-title">
       <div className="news-head">
@@ -24,16 +24,16 @@ export function ScanNews({
       </div>
       <p className="news-summary">
         Checked {report.checked} of {report.total}{" "}
-        {report.total === 1 ? "title" : "titles"} with {report.requests} DeepSeek{" "}
-        {report.requests === 1 ? "request" : "requests"}.
+        {report.total === 1 ? "title" : "titles"} with {report.requests}{" "}
+        {report.requests === 1 ? "request" : "requests"} to DeepSeek and AniList.
         {found === 0 && report.errors.length === 0
-          ? " No new seasons and no higher episode counts."
+          ? " No new seasons, no higher episode counts and no missing details."
           : ""}
       </p>
       {found > 0 && (
         <ul className="news-list">
           {report.changes.map((change) => (
-            <li key={change.title}>
+            <li key={`season-${change.title}`}>
               <span className="news-name">{change.title}</span>
               {change.added.length > 0 &&
                 ` added ${change.added
@@ -43,6 +43,11 @@ export function ScanNews({
                 ` grew ${change.grown
                   .map((season) => `S${season.number} ${season.from} to ${season.to} eps`)
                   .join(", ")}.`}
+            </li>
+          ))}
+          {report.details.map((entry) => (
+            <li key={`details-${entry.title}`}>
+              <span className="news-name">{entry.title}</span> filled {entry.fields.join(", ")}.
             </li>
           ))}
         </ul>

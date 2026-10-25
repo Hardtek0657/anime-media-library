@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { aiLookup } from "./lib/ai";
+import { anilistLookup } from "./lib/anilist";
 import type { AnimeDraft } from "./lib/db";
 import { findSimilarTitle } from "./lib/similar";
 import {
@@ -25,19 +26,20 @@ function seasonList(numbers: number[]): string {
   return `${labels.slice(0, -1).join(", ")} and ${labels[labels.length - 1]}`;
 }
 
+let nextRowKey = 0;
+
 type SeasonRow = {
   key: string;
   number: string;
   count: string;
   watched: string;
+  cover: string | null;
 };
-
-let nextRowKey = 0;
 
 function rowsFrom(anime: Anime | null): SeasonRow[] {
   if (!anime || anime.seasons.length === 0) {
     return [
-      { key: `new-${nextRowKey++}`, number: "1", count: "12", watched: "0" },
+      { key: `new-${nextRowKey++}`, number: "1", count: "12", watched: "0", cover: null },
     ];
   }
   return anime.seasons.map((season) => ({
@@ -45,6 +47,7 @@ function rowsFrom(anime: Anime | null): SeasonRow[] {
     number: String(season.number),
     count: String(season.episodeCount),
     watched: String(season.episodesWatched),
+    cover: season.cover,
   }));
 }
 
@@ -79,10 +82,14 @@ export function DetailPanel({
   const [format, setFormat] = useState<AnimeFormat>(anime?.format ?? "TV");
   const [notes, setNotes] = useState(anime?.notes ?? "");
   const [description, setDescription] = useState(anime?.description ?? "");
+  const [author, setAuthor] = useState(anime?.author ?? "");
+  const [studio, setStudio] = useState(anime?.studio ?? "");
+  const [genres, setGenres] = useState(anime?.genres ?? "");
+  const [cover, setCover] = useState(anime?.cover ?? null);
   const [rows, setRows] = useState<SeasonRow[]>(() => rowsFrom(anime));
   const [problem, setProblem] = useState<string | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
-  const [aiBusy, setAiBusy] = useState(false);
+  const [aiBusy, setAiBusy] = useState<"deepseek" | "anilist" | null>(null);
   const [aiNote, setAiNote] = useState<string | null>(null);
   const [aiProblem, setAiProblem] = useState<string | null>(null);
   const [similar, setSimilar] = useState<Anime | null>(null);
@@ -109,7 +116,7 @@ export function DetailPanel({
       }
     }
     setSimilar(null);
-    setAiBusy(true);
+    setAiBusy("deepseek");
     setAiProblem(null);
     setAiNote(null);
     try {
@@ -137,6 +144,7 @@ export function DetailPanel({
               number: String(season.number),
               count: String(season.episodes),
               watched: "0",
+              cover: null,
             })),
           );
           filled.push(seasonCount(answer.seasons.length));
@@ -166,6 +174,7 @@ export function DetailPanel({
               number: String(season.number),
               count: String(season.episodes),
               watched: "0",
+              cover: null,
             })),
           );
           setRows(merged);
@@ -192,7 +201,81 @@ export function DetailPanel({
     } catch (cause) {
       setAiProblem(cause instanceof Error ? cause.message : String(cause));
     } finally {
-      setAiBusy(false);
+      setAiBusy(null);
+    }
+  }
+
+  async function fetchDetails() {
+    const cleanTitle = title.trim();
+    if (!cleanTitle) {
+      setAiProblem("Type the title first.");
+      titleRef.current?.focus();
+      return;
+    }
+    setAiBusy("anilist");
+    setAiProblem(null);
+    setAiNote(null);
+    try {
+      const found = await anilistLookup(cleanTitle);
+      if (!found) {
+        setAiProblem("AniList has no match for that title.");
+        return;
+      }
+      const filled: string[] = [];
+      if (!year && found.year) {
+        setYear(String(found.year));
+        filled.push("year");
+      }
+      if (!anime && found.format !== format) {
+        setFormat(found.format as AnimeFormat);
+        filled.push("format");
+      }
+      if (!description.trim() && found.description) {
+        setDescription(found.description);
+        filled.push("description");
+      }
+      if (!author.trim() && found.author) {
+        setAuthor(found.author);
+        filled.push("author");
+      }
+      if (!studio.trim() && found.studio) {
+        setStudio(found.studio);
+        filled.push("studio");
+      }
+      if (!genres.trim() && found.genres) {
+        setGenres(found.genres);
+        filled.push("genres");
+      }
+      if (!cover && found.cover) {
+        setCover(found.cover);
+        filled.push("artwork");
+      }
+
+      const byNumber = new Map(found.seasons.map((season) => [season.number, season.cover]));
+      let seasonArt = 0;
+      // The chain has to match the rows, or art lands on the wrong season. When it does
+      // not, the series cover is used instead of nothing.
+      const matched = found.seasons.length === rows.length;
+      const next = rows.map((row) => {
+        if (row.cover) return row;
+        const url = matched ? byNumber.get(Number(row.number)) ?? null : found.cover;
+        if (!url) return row;
+        seasonArt += 1;
+        return { ...row, cover: url };
+      });
+      if (seasonArt > 0) setRows(next);
+
+      const parts = [...filled];
+      if (seasonArt > 0) parts.push(`${seasonArt} season ${seasonArt === 1 ? "cover" : "covers"}`);
+      setAiNote(
+        parts.length > 0
+          ? `${sentenceCase(parts.join(", "))} filled from AniList. Review before saving.`
+          : "Those fields already have values; AniList added nothing.",
+      );
+    } catch (cause) {
+      setAiProblem(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setAiBusy(null);
     }
   }
 
@@ -212,6 +295,7 @@ export function DetailPanel({
           number: String(Math.floor(highest) + 1),
           count: "12",
           watched: "0",
+          cover: null,
         },
       ];
     });
@@ -253,7 +337,12 @@ export function DetailPanel({
         Math.max(Number.parseInt(row.watched, 10) || 0, 0),
         count,
       );
-      seasons.push({ number, episodeCount: count, episodesWatched: watched });
+      seasons.push({
+        number,
+        episodeCount: count,
+        episodesWatched: watched,
+        cover: row.cover,
+      });
     }
 
     // Any saved season whose number no longer appears was either removed or renumbered.
@@ -272,6 +361,10 @@ export function DetailPanel({
           format,
           notes: notes.trim() ? notes.trim() : null,
           description: description.trim() ? description.trim() : null,
+          author: author.trim() ? author.trim() : null,
+          studio: studio.trim() ? studio.trim() : null,
+          genres: genres.trim() ? genres.trim() : null,
+          cover,
         },
         seasons,
         removed,
@@ -324,23 +417,33 @@ export function DetailPanel({
       </label>
 
       <div className="ai-row">
-        {aiReady ? (
+        <div className="ai-actions">
+          {aiReady ? (
+            <button
+              type="button"
+              className="quiet"
+              onClick={() => void fillFromAi()}
+              disabled={aiBusy !== null || busy}
+            >
+              {aiBusy === "deepseek" ? "Asking DeepSeek" : "Fill from AI"}
+            </button>
+          ) : (
+            <span className="hint">
+              AI fill needs a DeepSeek key.{" "}
+              <button type="button" className="link" onClick={onOpenSettings}>
+                Add one
+              </button>
+            </span>
+          )}
           <button
             type="button"
             className="quiet"
-            onClick={() => void fillFromAi()}
-            disabled={aiBusy || busy}
+            onClick={() => void fetchDetails()}
+            disabled={aiBusy !== null || busy}
           >
-            {aiBusy ? "Asking DeepSeek" : "Fill from AI"}
+            {aiBusy === "anilist" ? "Asking AniList" : "Fetch artwork and details"}
           </button>
-        ) : (
-          <span className="hint">
-            AI fill needs a DeepSeek key.{" "}
-            <button type="button" className="link" onClick={onOpenSettings}>
-              Add one
-            </button>
-          </span>
-        )}
+        </div>
         {aiProblem && (
           <p className="problem" role="alert">
             {aiProblem}
@@ -403,6 +506,11 @@ export function DetailPanel({
           )}
           {rows.map((row) => (
             <div className="season-edit" key={row.key}>
+              {row.cover ? (
+                <img className="season-art" src={row.cover} alt="" />
+              ) : (
+                <span className="season-art empty" aria-hidden="true" />
+              )}
               <label className="inline-field">
                 <span>Season</span>
                 <input
@@ -446,6 +554,34 @@ export function DetailPanel({
           Add season
         </button>
       </div>
+
+      <div className="field-pair">
+        <label className="field">
+          <span>Author / creator</span>
+          <input
+            value={author}
+            onChange={(event) => setAuthor(event.target.value)}
+            placeholder="Original creator"
+          />
+        </label>
+        <label className="field">
+          <span>Studio</span>
+          <input
+            value={studio}
+            onChange={(event) => setStudio(event.target.value)}
+            placeholder="Animation studio"
+          />
+        </label>
+      </div>
+
+      <label className="field">
+        <span>Genres</span>
+        <input
+          value={genres}
+          onChange={(event) => setGenres(event.target.value)}
+          placeholder="Action, Fantasy"
+        />
+      </label>
 
       <label className="field">
         <span>Description</span>

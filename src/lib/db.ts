@@ -20,9 +20,14 @@ type LibraryRow = {
   format: AnimeFormat;
   notes: string | null;
   description: string | null;
+  author: string | null;
+  studio: string | null;
+  genres: string | null;
+  cover: string | null;
   season_number: number | null;
   episode_count: number | null;
   episodes_watched: number | null;
+  season_cover: string | null;
 };
 
 export async function loadLibrary(): Promise<Anime[]> {
@@ -30,7 +35,9 @@ export async function loadLibrary(): Promise<Anime[]> {
     await db()
   ).select<LibraryRow[]>(
     `SELECT a.id, a.title, a.year, a.format, a.notes, a.description,
-            s.number AS season_number, s.episode_count, s.episodes_watched
+            a.author, a.studio, a.genres, a.cover,
+            s.number AS season_number, s.episode_count, s.episodes_watched,
+            s.cover AS season_cover
        FROM anime a
        LEFT JOIN season s ON s.anime_id = a.id
       ORDER BY a.title COLLATE NOCASE, s.number`,
@@ -47,6 +54,10 @@ export async function loadLibrary(): Promise<Anime[]> {
         format: row.format,
         notes: row.notes,
         description: row.description,
+        author: row.author,
+        studio: row.studio,
+        genres: row.genres,
+        cover: row.cover,
         seasons: [],
       };
       byId.set(row.id, anime);
@@ -60,6 +71,7 @@ export async function loadLibrary(): Promise<Anime[]> {
         number: row.season_number,
         episodeCount: row.episode_count,
         episodesWatched: row.episodes_watched,
+        cover: row.season_cover,
       });
     }
   }
@@ -72,6 +84,10 @@ export type AnimeDraft = {
   format: AnimeFormat;
   notes: string | null;
   description: string | null;
+  author: string | null;
+  studio: string | null;
+  genres: string | null;
+  cover: string | null;
 };
 
 export async function saveAnime(
@@ -99,6 +115,10 @@ export async function saveAnime(
     draft.format,
     draft.notes?.trim() || null,
     draft.description?.trim() || null,
+    draft.author?.trim() || null,
+    draft.studio?.trim() || null,
+    draft.genres?.trim() || null,
+    draft.cover,
   ];
 
   let animeId = id;
@@ -106,15 +126,16 @@ export async function saveAnime(
     // RETURNING, not last_insert_rowid(): the plugin pools connections, so the
     // rowid lookup can land on a different connection and return 0.
     const inserted = await conn.select<{ id: number }[]>(
-      `INSERT INTO anime (title, year, format, notes, description)
-            VALUES (?, ?, ?, ?, ?) RETURNING id`,
+      `INSERT INTO anime (title, year, format, notes, description, author, studio, genres, cover)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
       values,
     );
     animeId = inserted[0].id;
   } else {
-
     await conn.execute(
-      "UPDATE anime SET title = ?, year = ?, format = ?, notes = ?, description = ? WHERE id = ?",
+      `UPDATE anime SET title = ?, year = ?, format = ?, notes = ?, description = ?,
+              author = ?, studio = ?, genres = ?, cover = ?
+        WHERE id = ?`,
       [...values, animeId],
     );
   }
@@ -182,6 +203,97 @@ export async function applyScan(
       [season.to, animeId, season.number],
     );
   }
+}
+
+/** What AniList answered, reduced to the fields the shelf can use. */
+export type Details = {
+  author: string | null;
+  studio: string | null;
+  genres: string | null;
+  description: string | null;
+  cover: string | null;
+  seasons: { number: number; cover: string | null }[];
+};
+
+export type DetailsApplied = { fields: string[]; seasonCovers: number };
+
+/**
+ * Fills only the columns that are still empty, so a check can run over a library the user
+ * has already curated without overwriting their words. Returns what it filled.
+ */
+export async function applyDetails(
+  animeId: number,
+  details: Details,
+): Promise<DetailsApplied> {
+  const conn = await db();
+  const rows = await conn.select<
+    {
+      author: string | null;
+      studio: string | null;
+      genres: string | null;
+      description: string | null;
+      cover: string | null;
+    }[]
+  >("SELECT author, studio, genres, description, cover FROM anime WHERE id = ?", [animeId]);
+  if (rows.length === 0) return { fields: [], seasonCovers: 0 };
+  const current = rows[0];
+
+  const candidates: [keyof Omit<Details, "seasons">, string | null][] = [
+    ["author", details.author],
+    ["studio", details.studio],
+    ["genres", details.genres],
+    ["description", details.description],
+    ["cover", details.cover],
+  ];
+  const filled: string[] = [];
+  const assignments: string[] = [];
+  const values: string[] = [];
+  for (const [field, value] of candidates) {
+    if (!value) continue;
+    const present = current[field];
+    if (present !== null && present.trim() !== "") continue;
+    assignments.push(`${field} = ?`);
+    values.push(value);
+    filled.push(field);
+  }
+  if (assignments.length > 0) {
+    await conn.execute(`UPDATE anime SET ${assignments.join(", ")} WHERE id = ?`, [
+      ...values,
+      animeId,
+    ]);
+  }
+
+  // Season art is only trusted when the whole chain lines up with the rows we have.
+  // Otherwise every season gets the series cover, which is still worth showing and stops
+  // the check asking about this title again on every run.
+  const counted = await conn.select<{ total: number }[]>(
+    "SELECT count(*) AS total FROM season WHERE anime_id = ?",
+    [animeId],
+  );
+  const seasonTotal = counted[0]?.total ?? 0;
+  const art = new Map<number, string | null>();
+  if (seasonTotal > 0 && seasonTotal === details.seasons.length) {
+    for (const season of details.seasons) art.set(season.number, season.cover);
+  }
+  let seasonCovers = 0;
+  if (seasonTotal > 0) {
+    const rows = await conn.select<{ number: number }[]>(
+      "SELECT number FROM season WHERE anime_id = ? AND (cover IS NULL OR cover = '')",
+      [animeId],
+    );
+    for (const row of rows) {
+      const url =
+        seasonTotal === details.seasons.length ? art.get(row.number) ?? null : details.cover;
+      if (!url) continue;
+      await conn.execute("UPDATE season SET cover = ? WHERE anime_id = ? AND number = ?", [
+        url,
+        animeId,
+        row.number,
+      ]);
+      seasonCovers += 1;
+    }
+  }
+  return { fields: filled, seasonCovers };
 }
 
 export async function advanceSeason(
