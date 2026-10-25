@@ -63,3 +63,19 @@ export async function anilistLookupDeep(
   }
   return { details: null, calls };
 }
+export type AniListCandidate = {
+  id: number;
+  title: string;
+  year: number | null;
+  format: string;
+};
+
+/** Every entry AniList offers for a title, so the user can pick the one they meant. */
+export function anilistCandidates(title: string): Promise<AniListCandidate[]> {
+  return invoke<AniListCandidate[]>("anilist_candidates", { title });
+}
+
+/** Details for one exact AniList entry. */
+export function anilistById(id: number): Promise<AniListDetails | null> {
+  return invoke<AniListDetails | null>("anilist_by_id", { id });
+}

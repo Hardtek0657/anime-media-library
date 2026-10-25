@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { aiLookup } from "./lib/ai";
-import { anilistLookup } from "./lib/anilist";
+import { anilistById, anilistCandidates, anilistLookup, type AniListCandidate } from "./lib/anilist";
 import type { AnimeDraft } from "./lib/db";
 import { findSimilarTitle } from "./lib/similar";
 import {
@@ -93,6 +93,7 @@ export function DetailPanel({
   const [aiNote, setAiNote] = useState<string | null>(null);
   const [aiProblem, setAiProblem] = useState<string | null>(null);
   const [similar, setSimilar] = useState<Anime | null>(null);
+  const [candidates, setCandidates] = useState<AniListCandidate[] | null>(null);
   const titleRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -205,7 +206,7 @@ export function DetailPanel({
     }
   }
 
-  async function fetchDetails() {
+  async function showCandidates() {
     const cleanTitle = title.trim();
     if (!cleanTitle) {
       setAiProblem("Type the title first.");
@@ -216,7 +217,31 @@ export function DetailPanel({
     setAiProblem(null);
     setAiNote(null);
     try {
-      const found = await anilistLookup(cleanTitle);
+      const list = await anilistCandidates(cleanTitle);
+      if (list.length === 0) setAiProblem("AniList has no matches for that title.");
+      else setCandidates(list);
+    } catch (cause) {
+      setAiProblem(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setAiBusy(null);
+    }
+  }
+
+  async function fetchDetails(candidateId?: number) {
+    const cleanTitle = title.trim();
+    if (!cleanTitle) {
+      setAiProblem("Type the title first.");
+      titleRef.current?.focus();
+      return;
+    }
+    setAiBusy("anilist");
+    setAiProblem(null);
+    setAiNote(null);
+    try {
+      const found =
+        candidateId === undefined
+          ? await anilistLookup(cleanTitle)
+          : await anilistById(candidateId);
       if (!found) {
         setAiProblem("AniList has no match for that title.");
         return;
@@ -443,6 +468,14 @@ export function DetailPanel({
           >
             {aiBusy === "anilist" ? "Asking AniList" : "Fetch artwork and details"}
           </button>
+          <button
+            type="button"
+            className="link"
+            onClick={() => void showCandidates()}
+            disabled={aiBusy !== null || busy}
+          >
+            Pick a different match
+          </button>
         </div>
         {aiProblem && (
           <p className="problem" role="alert">
@@ -470,6 +503,34 @@ export function DetailPanel({
           </div>
         )}
       </div>
+
+      {candidates && (
+        <div className="notice" role="group" aria-label="AniList matches">
+          <p>Which one do you mean?</p>
+          <div className="notice-actions">
+            {candidates.map((candidate) => (
+              <button
+                key={candidate.id}
+                type="button"
+                className="btn"
+                onClick={() => {
+                  setCandidates(null);
+                  void fetchDetails(candidate.id);
+                }}
+              >
+                {candidate.title}
+                {candidate.year && !candidate.title.includes(String(candidate.year))
+                  ? ` (${candidate.year})`
+                  : ""}{" "}
+                · {candidate.format}
+              </button>
+            ))}
+            <button type="button" className="link" onClick={() => setCandidates(null)}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="field-pair">
         <label className="field">

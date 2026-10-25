@@ -4,6 +4,8 @@ version = "0.1.0"
 description = "Local anime watch log built with Tauri and SQLite"
 authors = ["Hardtek0657"]
 edition = "2024"
+# Proprietary: never publish this crate to a registry.
+publish = false
 
 [lib]
 # The `_lib` suffix keeps the lib name distinct from the bin name on Windows.

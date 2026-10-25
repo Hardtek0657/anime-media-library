@@ -221,6 +221,7 @@ export async function applyScan(
 
 /** What AniList answered, reduced to the fields the shelf can use. */
 export type Details = {
+  year: number | null;
   author: string | null;
   studio: string | null;
   genres: string | null;
@@ -244,15 +245,17 @@ export async function applyDetails(
     {
       author: string | null;
       studio: string | null;
+      year: number | null;
       genres: string | null;
       description: string | null;
       cover: string | null;
     }[]
-  >("SELECT author, studio, genres, description, cover FROM anime WHERE id = ?", [animeId]);
+  >("SELECT year, author, studio, genres, description, cover FROM anime WHERE id = ?", [animeId]);
   if (rows.length === 0) return { fields: [], seasonCovers: 0 };
   const current = rows[0];
 
-  const candidates: [keyof Omit<Details, "seasons">, string | null][] = [
+  const candidates: [keyof Omit<Details, "seasons">, string | number | null][] = [
+    ["year", details.year],
     ["author", details.author],
     ["studio", details.studio],
     ["genres", details.genres],
@@ -261,10 +264,11 @@ export async function applyDetails(
   ];
   const filled: string[] = [];
   const assignments: string[] = [];
-  const values: string[] = [];
+  const values: (string | number)[] = [];
   for (const [field, value] of candidates) {
     if (!value) continue;
     const present = current[field];
+    if (typeof present === "number") continue;
     if (present !== null && present.trim() !== "") continue;
     assignments.push(`${field} = ?`);
     values.push(value);

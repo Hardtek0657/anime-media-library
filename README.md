@@ -233,3 +233,9 @@ the optional DeepSeek call, the app touches one file: its own database.
   debugging port on 9222 and marks the window title. Run it with
   `pnpm tauri dev --config src-tauri/tauri.debug.conf.json`. The shipped config leaves the
   port closed.
+
+## License
+
+Proprietary, all rights reserved. No permission is granted to use, copy, modify or
+distribute this code without written permission from the author. See [LICENSE](LICENSE).
+Anime titles, artwork and metadata belong to their respective rights holders.

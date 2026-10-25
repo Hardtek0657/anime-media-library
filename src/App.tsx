@@ -219,6 +219,7 @@ export default function App() {
             }
 
             const applied = await applyDetails(anime.id, {
+              year: found.year,
               author: found.author,
               studio: found.studio,
               genres: found.genres,

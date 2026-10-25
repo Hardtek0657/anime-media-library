@@ -277,12 +277,12 @@ fn author_of(media: &Value) -> Option<String> {
     None
 }
 
-#[tauri::command]
-pub fn anilist_lookup(title: String) -> Result<Option<Details>, String> {
-    let client = client()?;
+/// One search request. AniList answers an empty page rather than an error when nothing
+/// matches, which is what lets a misspelled title be retried against a shorter term.
+fn search_once(client: &Client, term: &str) -> Result<Option<Value>, String> {
     let response = client
         .post(ENDPOINT)
-        .json(&json!({ "query": QUERY, "variables": { "search": title } }))
+        .json(&json!({ "query": QUERY, "variables": { "search": term } }))
         .send()
         .map_err(|error| format!("AniList could not be reached: {error}"))?;
 
@@ -299,14 +299,38 @@ pub fn anilist_lookup(title: String) -> Result<Option<Details>, String> {
     if body.get("errors").is_some() {
         return Err("AniList rejected the search.".into());
     }
-    let media = &body["data"]["Page"]["media"];
-    let Some(media) = media.as_array().and_then(|items| items.first()) else {
-        return Ok(None);
-    };
-    if media["id"].as_i64().is_none() {
-        return Ok(None);
-    }
+    Ok(body["data"]["Page"]["media"]
+        .as_array()
+        .and_then(|items| items.first())
+        .filter(|media| media["id"].as_i64().is_some())
+        .cloned())
+}
 
+/// A typo breaks AniList's search, so the full title is tried first, then the part before
+/// a colon or dash, then the first three words, then the title without its first word.
+fn search_terms(title: &str) -> Vec<String> {
+    let mut terms = vec![title.to_string()];
+    let head = title.split([':', '-']).next().unwrap_or(title).trim();
+    if head.len() >= 3 && head != title {
+        terms.push(head.to_string());
+    }
+    let words: Vec<&str> = title.split_whitespace().collect();
+    if words.len() > 3 {
+        let short = words[..3].join(" ");
+        if !terms.contains(&short) {
+            terms.push(short);
+        }
+    }
+    if words.len() >= 4 {
+        let rest = words[1..].join(" ");
+        if !terms.contains(&rest) {
+            terms.push(rest);
+        }
+    }
+    terms
+}
+
+fn build_details(client: &Client, media: &Value) -> Details {
     let mut cache: HashMap<String, Option<String>> = HashMap::new();
     let chain = ordered_chain(media);
     let mut seasons = Vec::new();
@@ -314,7 +338,7 @@ pub fn anilist_lookup(title: String) -> Result<Option<Details>, String> {
         seasons.push(SeasonArt {
             number: index as u32 + 1,
             episodes: node["episodes"].as_u64().map(|value| value as u32),
-            cover: cover_data_uri(&client, node["coverImage"]["large"].as_str(), &mut cache),
+            cover: cover_data_uri(client, node["coverImage"]["large"].as_str(), &mut cache),
         });
     }
 
@@ -334,7 +358,7 @@ pub fn anilist_lookup(title: String) -> Result<Option<Details>, String> {
         })
         .filter(|value| !value.is_empty());
 
-    Ok(Some(Details {
+    Details {
         title: title_of(media),
         year: media["seasonYear"].as_i64(),
         format: format_label(media["format"].as_str()),
@@ -342,7 +366,137 @@ pub fn anilist_lookup(title: String) -> Result<Option<Details>, String> {
         studio: studio_of(media),
         author: author_of(media),
         genres,
-        cover: cover_data_uri(&client, media["coverImage"]["large"].as_str(), &mut cache),
+        cover: cover_data_uri(client, media["coverImage"]["large"].as_str(), &mut cache),
         seasons,
-    }))
+    }
+}
+
+#[tauri::command]
+pub fn anilist_lookup(title: String) -> Result<Option<Details>, String> {
+    let client = client()?;
+    let mut found = None;
+    for term in search_terms(&title) {
+        found = search_once(&client, &term)?;
+        if found.is_some() {
+            break;
+        }
+    }
+    Ok(found.as_ref().map(|media| build_details(&client, media)))
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Candidate {
+    id: i64,
+    title: String,
+    year: Option<i64>,
+    format: String,
+}
+
+const CANDIDATES_QUERY: &str = r#"
+query ($search: String) {
+  Page(perPage: 10) {
+    media(search: $search, type: ANIME, sort: SEARCH_MATCH) {
+      id
+      title { romaji english }
+      seasonYear
+      format
+    }
+  }
+}
+"#;
+
+/// Every candidate AniList offers for a title, so the user can say which one they mean.
+#[tauri::command]
+pub fn anilist_candidates(title: String) -> Result<Vec<Candidate>, String> {
+    let client = client()?;
+    let mut found: Vec<Value> = Vec::new();
+    for term in search_terms(&title) {
+        let response = client
+            .post(ENDPOINT)
+            .json(&json!({ "query": CANDIDATES_QUERY, "variables": { "search": term } }))
+            .send()
+            .map_err(|error| format!("AniList could not be reached: {error}"))?;
+        if !response.status().is_success() {
+            return Err(format!("AniList answered {}.", response.status()));
+        }
+        let body: Value = response
+            .json()
+            .map_err(|error| format!("AniList sent something unreadable: {error}"))?;
+        found = body["data"]["Page"]["media"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|media| media["id"].as_i64().is_some())
+            .collect();
+        if !found.is_empty() {
+            break;
+        }
+    }
+
+    Ok(found
+        .iter()
+        .map(|media| Candidate {
+            id: media["id"].as_i64().unwrap_or_default(),
+            title: title_of(media),
+            year: media["seasonYear"].as_i64(),
+            format: format_label(media["format"].as_str()),
+        })
+        .collect())
+}
+
+const ID_QUERY: &str = r#"
+query ($id: Int) {
+  Media(id: $id, type: ANIME) {
+    id
+    title { romaji english }
+    description(asHtml: false)
+    seasonYear
+    format
+    episodes
+    coverImage { large }
+    studios(isMain: true) { nodes { name } }
+    genres
+    staff(perPage: 12, sort: [RELEVANCE]) {
+      edges { role node { name { full } } }
+    }
+    relations {
+      edges {
+        relationType
+        node {
+          id
+          type
+          format
+          episodes
+          seasonYear
+          coverImage { large }
+          title { romaji english }
+        }
+      }
+    }
+  }
+}
+"#;
+
+/// Details for one exact AniList entry, used when the user picks a candidate.
+#[tauri::command]
+pub fn anilist_by_id(id: i64) -> Result<Option<Details>, String> {
+    let client = client()?;
+    let response = client
+        .post(ENDPOINT)
+        .json(&json!({ "query": ID_QUERY, "variables": { "id": id } }))
+        .send()
+        .map_err(|error| format!("AniList could not be reached: {error}"))?;
+    if !response.status().is_success() {
+        return Err(format!("AniList answered {}.", response.status()));
+    }
+    let body: Value = response
+        .json()
+        .map_err(|error| format!("AniList sent something unreadable: {error}"))?;
+    let media = &body["data"]["Media"];
+    if media["id"].as_i64().is_none() {
+        return Ok(None);
+    }
+    Ok(Some(build_details(&client, media)))
 }

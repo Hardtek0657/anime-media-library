@@ -41,6 +41,8 @@ pub fn run() {
             ai::ai_clear_key,
             ai::ai_lookup,
             anilist::anilist_lookup,
+            anilist::anilist_candidates,
+            anilist::anilist_by_id,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
