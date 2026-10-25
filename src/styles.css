@@ -283,7 +283,8 @@ textarea::placeholder {
   display: flex;
   flex-direction: column;
   gap: 3px;
-  min-width: 156px;
+  width: 176px;
+  flex: none;
 }
 
 .strip {
@@ -320,6 +321,23 @@ textarea::placeholder {
 .more {
   font-size: 10.5px;
   color: var(--dim);
+}
+
+.season-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  width: 100%;
+}
+
+.season-summary .strip-track {
+  height: 4px;
+}
+
+.season-summary-text {
+  font-size: 10.5px;
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
 }
 
 .row-action {

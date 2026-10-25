@@ -95,6 +95,8 @@ Checked in the running app on Windows (WebView2 155), not only in a browser:
   panel.
 - Delete asks for confirmation, then removes the title and its seasons.
 - Escape closes the detail panel.
+- A six season title renders as one aggregate bar instead of six strips, and every row
+  stayed 69 px tall with four titles on screen.
 - `pnpm tauri build` produced a working bundle, and the packaged executable opened the same
   library from the same database file.
 
