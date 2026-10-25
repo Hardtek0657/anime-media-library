@@ -53,6 +53,10 @@ pnpm tauri build
 One SQLite file, `anime-library.db`, in the app config directory. On Windows that is
 `%APPDATA%\com.hardtek.animemedialibrary\`. Copy that file to back up the library.
 
+The path comes from the app identifier, not the current working directory: the SQL plugin
+resolves a relative database name against the app config dir. Start the exe from `C:\`, from
+a shortcut, or from the folder you happen to be in, and it reads the same file.
+
 The DeepSeek key is not in that file. It is stored as a Windows credential under
 `anime-media-library` / `deepseek`, and it is removed from the same dialog that saved it.
 

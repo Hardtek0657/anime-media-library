@@ -1,6 +1,9 @@
 import Database from "@tauri-apps/plugin-sql";
 import type { Anime, AnimeFormat, Season } from "./model";
 
+// Must match the migrations URL in src-tauri/src/lib.rs. A relative sqlite name is
+// resolved against the app config dir, not the process directory, so the file always
+// lands in %APPDATA%\com.hardtek.animemedialibrary\ whichever folder starts the exe.
 const DB_URL = "sqlite:anime-library.db";
 
 let handle: Promise<Database> | null = null;

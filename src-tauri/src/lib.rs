@@ -19,6 +19,9 @@ pub fn run() {
         },
     ];
 
+    // This URL must stay identical to DB_URL in src/lib/db.ts. The plugin maps the name
+    // onto app_config_dir(), so migrations and queries always touch the same file in
+    // %APPDATA%\com.hardtek.animemedialibrary\, independent of the working directory.
     tauri::Builder::default()
         .plugin(
             tauri_plugin_sql::Builder::default()
