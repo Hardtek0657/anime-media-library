@@ -26,18 +26,31 @@ function editDistance(left: string, right: string): number {
 }
 
 /**
- * True when `stored` is probably the canonical name with a typo: one edit per seven
- * characters, and only on titles long enough for that to mean something. A different
- * alias ("Arifureta" for the full title) is far past this line and is left alone.
+ * The name a shelf entry should carry instead of `stored`, or null when it already matches
+ * one of AniList's names. A romaji shelf title is not a misspelling of the English one, so
+ * an exact match on any variant settles it; only a typo of a real variant is renamed, and
+ * then to that variant rather than to whichever name AniList happens to display.
  */
-export function looksLikeTypo(stored: string, canonical: string): boolean {
-  const left = normalizeTitle(stored);
-  const right = normalizeTitle(canonical);
-  if (left === right) return false;
-  if (left.length < 6 || right.length < 6) return false;
-  const allowed = Math.max(1, Math.floor(Math.max(left.length, right.length) / 7));
-  return editDistance(left, right) <= allowed;
+export function renameSuggestion(stored: string, variants: string[]): string | null {
+  const needle = normalizeTitle(stored);
+  const names = variants.map((name) => name.trim()).filter((name) => name !== "");
+  if (names.some((name) => normalizeTitle(name) === needle)) return null;
+
+  let best: string | null = null;
+  let bestDistance = Number.POSITIVE_INFINITY;
+  for (const name of names) {
+    const candidate = normalizeTitle(name);
+    if (candidate.length < 6) continue;
+    const allowed = Math.max(1, Math.floor(Math.max(needle.length, candidate.length) / 7));
+    const distance = editDistance(needle, candidate);
+    if (distance <= allowed && distance < bestDistance) {
+      best = name;
+      bestDistance = distance;
+    }
+  }
+  return best === stored ? null : best;
 }
+
 export function findSimilarTitle(
   title: string,
   library: Anime[],

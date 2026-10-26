@@ -8,6 +8,9 @@ export type AniListSeason = {
 
 export type AniListDetails = {
   title: string;
+  /** Romaji, English and the synonyms AniList holds, so a shelf title can be checked
+   *  against every name the entry is known by. */
+  titles: string[];
   year: number | null;
   format: string;
   description: string | null;

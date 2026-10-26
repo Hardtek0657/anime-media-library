@@ -16,7 +16,7 @@ import {
   type AnimeDraft,
 } from "./lib/db";
 import { planChange, type ScanReport } from "./lib/scan";
-import { looksLikeTypo, normalizeTitle } from "./lib/similar";
+import { renameSuggestion } from "./lib/similar";
 import { statusOf, type Anime, type AnimeFormat, type Filter, type Season } from "./lib/model";
 
 function describe(cause: unknown): string {
@@ -209,15 +209,11 @@ export default function App() {
           const { details: found, calls } = await anilistLookupDeep(anime.title, setScanPaused);
           report.requests += calls;
           if (found) {
-            const canonical = found.title;
-            const sameWords =
-              normalizeTitle(anime.title) === normalizeTitle(canonical ?? "");
-            if (
-              canonical &&
-              canonical !== anime.title &&
-              (sameWords || looksLikeTypo(anime.title, canonical))
-            ) {
-              report.renames.push({ id: anime.id, from: anime.title, to: canonical });
+            // AniList knows every name the entry goes by; only a name that matches none of
+            // them is a misspelling, so a romaji title is never "corrected" to the English.
+            const to = renameSuggestion(anime.title, found.titles);
+            if (to && to !== anime.title) {
+              report.renames.push({ id: anime.id, from: anime.title, to });
             }
 
             const applied = await applyDetails(anime.id, {
