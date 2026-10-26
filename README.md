@@ -41,7 +41,7 @@ shelf remembers it.
   upper before lower.
 - One title per show: saving a title that already exists is refused and names the existing
   entry, and a near miss (a typo) asks "same show?" before the AI request goes out.
-- Every title stored in a local SQLite database. Deleting a title deletes its seasons.
+- Deleting a title deletes its seasons.
 
 ## Stack
 
@@ -134,8 +134,8 @@ title, shown as `Checking 2 of 5…` while it runs.
   was added or raised. `Dismiss` closes it.
 - A failure stops the run and the error appears in the report, keeping whatever was applied
   before it. Running it again is safe, because the check only adds.
-- A new movie or spin-off is its own title, so it is not added automatically; the card says
-  so.
+- A new movie or spin-off is its own title, so it is not added automatically; the report
+  says so.
 
 ## Schema
 
