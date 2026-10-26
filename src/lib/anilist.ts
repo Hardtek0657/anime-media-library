@@ -24,17 +24,38 @@ export function anilistLookup(title: string): Promise<AniListDetails | null> {
   return invoke<AniListDetails | null>("anilist_lookup", { title });
 }
 
-/** One call, retried once: a long check occasionally meets a rate limit or a slow answer. */
-// AniList allows about ninety requests a minute, and a season chain spends one request per
-// season, so a sweep can briefly outrun it. Two patient retries recover most of those.
-async function lookupOnce(term: string): Promise<AniListDetails | null> {
+/** How long the check waits when AniList says it is being asked too often. */
+const PAUSE_MS = 65_000;
+/** Attempts per term, so a paused check still ends if AniList stays unhappy. */
+const ATTEMPTS = 4;
+
+function isRateLimit(cause: unknown): boolean {
+  return String(cause).includes("RATE_LIMIT");
+}
+
+/**
+ * One call per term. A rate limit pauses the whole check and asks again for the same term
+ * instead of moving on: a skipped title is a wrong episode count, which is worse than a
+ * minute of waiting.
+ */
+async function lookupOnce(
+  term: string,
+  onWait?: (waiting: boolean) => void,
+): Promise<AniListDetails | null> {
   let last: unknown;
-  for (let attempt = 0; attempt < 3; attempt += 1) {
+  for (let attempt = 0; attempt < ATTEMPTS; attempt += 1) {
     try {
       return await anilistLookup(term);
     } catch (cause) {
       last = cause;
-      await new Promise((resolve) => setTimeout(resolve, 4000));
+      if (isRateLimit(cause)) {
+        // Say so on screen: a minute of silence reads as a hang.
+        onWait?.(true);
+        await new Promise((resolve) => setTimeout(resolve, PAUSE_MS));
+        onWait?.(false);
+      } else {
+        await new Promise((resolve) => setTimeout(resolve, 4000));
+      }
     }
   }
   throw last;
@@ -47,6 +68,7 @@ async function lookupOnce(term: string): Promise<AniListDetails | null> {
  */
 export async function anilistLookupDeep(
   title: string,
+  onWait?: (waiting: boolean) => void,
 ): Promise<{ details: AniListDetails | null; calls: number }> {
   const terms = [title.trim()];
   const head = title.split(/[:\-\u2013]/)[0].trim();
@@ -64,7 +86,7 @@ export async function anilistLookupDeep(
   let calls = 0;
   for (const term of terms) {
     calls += 1;
-    const details = await lookupOnce(term);
+    const details = await lookupOnce(term, onWait);
     if (details) return { details, calls };
   }
   return { details: null, calls };

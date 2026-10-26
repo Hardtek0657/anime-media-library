@@ -3,14 +3,28 @@
 //! title is sent. Artwork is returned as a data URI so the database stays one file.
 
 use reqwest::blocking::Client;
+
+/// The front end waits and asks again when it sees this, rather than giving up on the title.
+const RATE_LIMITED: &str = "RATE_LIMIT AniList is limiting requests. Retrying shortly.";
+
+/// Network work runs here, never on the thread that paints the window: a check over a large
+/// library spends minutes waiting on AniList, and blocking the window for that long froze it.
+async fn blocking<T, F>(work: F) -> Result<T, String>
+where
+    F: FnOnce() -> Result<T, String> + Send + 'static,
+    T: Send + 'static,
+{
+    tauri::async_runtime::spawn_blocking(work)
+        .await
+        .map_err(|error| format!("The lookup stopped unexpectedly: {error}"))?
+}
 use serde::Serialize;
 use serde_json::{json, Value};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::time::Duration;
 
 const ENDPOINT: &str = "https://graphql.anilist.co";
 const MAX_COVER_BYTES: usize = 400_000;
-const MAX_CHAIN: usize = 12;
 const MAX_DESCRIPTION: usize = 1200;
 
 const QUERY: &str = r#"
@@ -187,72 +201,6 @@ fn cover_data_uri(
     fetched
 }
 
-fn collect_relations(
-    media: &Value,
-    prequels: &mut HashMap<i64, Vec<Value>>,
-    sequels: &mut HashMap<i64, Vec<Value>>,
-) {
-    let id = media["id"].as_i64().unwrap_or_default();
-    let Some(edges) = media["relations"]["edges"].as_array() else {
-        return;
-    };
-    for edge in edges {
-        let node = &edge["node"];
-        if node["type"].as_str() != Some("ANIME") {
-            continue;
-        }
-        // Only series entries belong in a season chain. Specials, OVAs and movies would
-        // shift every season number once, which puts the wrong art on each row.
-        if !matches!(node["format"].as_str(), Some("TV") | Some("TV_SHORT")) {
-            continue;
-        }
-        match edge["relationType"].as_str().unwrap_or_default() {
-            "PREQUEL" => prequels.entry(id).or_default().push(node.clone()),
-            "SEQUEL" => sequels.entry(id).or_default().push(node.clone()),
-            _ => {}
-        }
-    }
-}
-
-/// Walks PREQUEL back to the first entry, then SEQUEL forward, so season numbers follow
-/// the franchise order rather than whichever entry the search happened to return.
-fn ordered_chain(start: &Value) -> Vec<Value> {
-    let mut prequels: HashMap<i64, Vec<Value>> = HashMap::new();
-    let mut sequels: HashMap<i64, Vec<Value>> = HashMap::new();
-    collect_relations(start, &mut prequels, &mut sequels);
-
-    let mut seen: HashSet<i64> = HashSet::new();
-    seen.insert(start["id"].as_i64().unwrap_or_default());
-    let mut first = start.clone();
-    for _ in 0..MAX_CHAIN {
-        let id = first["id"].as_i64().unwrap_or_default();
-        let Some(node) = prequels.get(&id).and_then(|nodes| nodes.first()).cloned() else {
-            break;
-        };
-        if !seen.insert(node["id"].as_i64().unwrap_or_default()) {
-            break;
-        }
-        collect_relations(&node, &mut prequels, &mut sequels);
-        first = node;
-    }
-
-    let mut chain = vec![first.clone()];
-    let mut current = first;
-    for _ in 0..MAX_CHAIN {
-        let id = current["id"].as_i64().unwrap_or_default();
-        let Some(node) = sequels.get(&id).and_then(|nodes| nodes.first()).cloned() else {
-            break;
-        };
-        if !seen.insert(node["id"].as_i64().unwrap_or_default()) {
-            break;
-        }
-        collect_relations(&node, &mut prequels, &mut sequels);
-        chain.push(node.clone());
-        current = node;
-    }
-    chain
-}
-
 fn studio_of(media: &Value) -> Option<String> {
     media["studios"]["nodes"]
         .as_array()?
@@ -277,9 +225,18 @@ fn author_of(media: &Value) -> Option<String> {
     None
 }
 
+/// AniList allows about 90 requests a minute, and a season chain spends one request per
+/// season, so a shelf of a hundred titles outruns it within a couple of minutes. One
+/// request every 700 ms is a single lane under that ceiling: the sweep paces itself and
+/// rarely meets the limit at all.
+fn breathe() {
+    std::thread::sleep(Duration::from_millis(700));
+}
+
 /// One search request. AniList answers an empty page rather than an error when nothing
 /// matches, which is what lets a misspelled title be retried against a shorter term.
 fn search_once(client: &Client, term: &str) -> Result<Option<Value>, String> {
+    breathe();
     let response = client
         .post(ENDPOINT)
         .json(&json!({ "query": QUERY, "variables": { "search": term } }))
@@ -287,7 +244,7 @@ fn search_once(client: &Client, term: &str) -> Result<Option<Value>, String> {
         .map_err(|error| format!("AniList could not be reached: {error}"))?;
 
     if response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
-        return Err("AniList is rate limiting. Wait a minute and try again.".into());
+        return Err(RATE_LIMITED.into());
     }
     if !response.status().is_success() {
         return Err(format!("AniList answered {}.", response.status()));
@@ -297,6 +254,10 @@ fn search_once(client: &Client, term: &str) -> Result<Option<Value>, String> {
         .json()
         .map_err(|error| format!("AniList sent something unreadable: {error}"))?;
     if body.get("errors").is_some() {
+        // AniList sometimes reports the limit in the body with a 200.
+        if body.to_string().to_lowercase().contains("too many requests") {
+            return Err(RATE_LIMITED.into());
+        }
         return Err("AniList rejected the search.".into());
     }
     Ok(body["data"]["Page"]["media"]
@@ -331,19 +292,26 @@ fn search_terms(title: &str) -> Vec<String> {
 }
 
 /// One entry by id, used to walk a seasonal chain: AniList returns relations one hop at a
-/// time, so five seasons are five queries and not one.
-fn fetch_entry(client: &Client, id: i64) -> Option<Value> {
+/// time, so five seasons are five queries and not one. A rate limit travels up so the whole
+/// lookup is paused and asked again, instead of quietly cutting the chain short.
+fn fetch_entry(client: &Client, id: i64) -> Result<Option<Value>, String> {
+    breathe();
     let response = client
         .post(ENDPOINT)
         .json(&json!({ "query": ID_QUERY, "variables": { "id": id } }))
         .send()
-        .ok()?;
-    if !response.status().is_success() {
-        return None;
+        .map_err(|error| format!("AniList could not be reached: {error}"))?;
+    if response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
+        return Err(RATE_LIMITED.into());
     }
-    let body: Value = response.json().ok()?;
+    if !response.status().is_success() {
+        return Ok(None);
+    }
+    let body: Value = response
+        .json()
+        .map_err(|error| format!("AniList sent something unreadable: {error}"))?;
     let media = &body["data"]["Media"];
-    media["id"].as_i64().map(|_| media.clone())
+    Ok(media["id"].as_i64().map(|_| media.clone()))
 }
 
 fn sequel_of(media: &Value) -> Option<i64> {
@@ -358,7 +326,7 @@ fn sequel_of(media: &Value) -> Option<i64> {
 }
 
 /// The seasons in order: this entry, then every TV sequel after it.
-fn season_chain(client: &Client, media: &Value) -> Vec<Value> {
+fn season_chain(client: &Client, media: &Value) -> Result<Vec<Value>, String> {
     const MAX_CHAIN: usize = 12;
     let mut chain = vec![media.clone()];
     while chain.len() < MAX_CHAIN {
@@ -368,17 +336,17 @@ fn season_chain(client: &Client, media: &Value) -> Vec<Value> {
         if chain.iter().any(|entry| entry["id"].as_i64() == Some(next)) {
             break;
         }
-        match fetch_entry(client, next) {
+        match fetch_entry(client, next)? {
             Some(entry) => chain.push(entry),
             None => break,
         }
     }
-    chain
+    Ok(chain)
 }
 
-fn build_details(client: &Client, media: &Value) -> Details {
+fn build_details(client: &Client, media: &Value) -> Result<Details, String> {
     let mut cache: HashMap<String, Option<String>> = HashMap::new();
-    let chain = season_chain(client, media);
+    let chain = season_chain(client, media)?;
     let mut seasons = Vec::new();
     for (index, node) in chain.iter().enumerate() {
         seasons.push(SeasonArt {
@@ -404,7 +372,7 @@ fn build_details(client: &Client, media: &Value) -> Details {
         })
         .filter(|value| !value.is_empty());
 
-    Details {
+    Ok(Details {
         title: title_of(media),
         year: media["seasonYear"].as_i64(),
         format: format_label(media["format"].as_str()),
@@ -414,11 +382,15 @@ fn build_details(client: &Client, media: &Value) -> Details {
         genres,
         cover: cover_data_uri(client, media["coverImage"]["large"].as_str(), &mut cache),
         seasons,
-    }
+    })
 }
 
 #[tauri::command]
-pub fn anilist_lookup(title: String) -> Result<Option<Details>, String> {
+pub async fn anilist_lookup(title: String) -> Result<Option<Details>, String> {
+    blocking(move || lookup(title)).await
+}
+
+fn lookup(title: String) -> Result<Option<Details>, String> {
     let client = client()?;
     let mut found = None;
     for term in search_terms(&title) {
@@ -427,7 +399,7 @@ pub fn anilist_lookup(title: String) -> Result<Option<Details>, String> {
             break;
         }
     }
-    Ok(found.as_ref().map(|media| build_details(&client, media)))
+    found.as_ref().map(|media| build_details(&client, media)).transpose()
 }
 
 #[derive(Serialize)]
@@ -454,15 +426,26 @@ query ($search: String) {
 
 /// Every candidate AniList offers for a title, so the user can say which one they mean.
 #[tauri::command]
-pub fn anilist_candidates(title: String) -> Result<Vec<Candidate>, String> {
+pub async fn anilist_candidates(title: String) -> Result<Vec<Candidate>, String> {
+    blocking(move || candidates(title)).await
+}
+
+fn candidates(title: String) -> Result<Vec<Candidate>, String> {
     let client = client()?;
     let mut found: Vec<Value> = Vec::new();
     for term in search_terms(&title) {
+        breathe();
         let response = client
             .post(ENDPOINT)
             .json(&json!({ "query": CANDIDATES_QUERY, "variables": { "search": term } }))
             .send()
             .map_err(|error| format!("AniList could not be reached: {error}"))?;
+        if response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
+            return Err(RATE_LIMITED.into());
+        }
+        if response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
+            return Err(RATE_LIMITED.into());
+        }
         if !response.status().is_success() {
             return Err(format!("AniList answered {}.", response.status()));
         }
@@ -527,13 +510,21 @@ query ($id: Int) {
 
 /// Details for one exact AniList entry, used when the user picks a candidate.
 #[tauri::command]
-pub fn anilist_by_id(id: i64) -> Result<Option<Details>, String> {
+pub async fn anilist_by_id(id: i64) -> Result<Option<Details>, String> {
+    blocking(move || by_id(id)).await
+}
+
+fn by_id(id: i64) -> Result<Option<Details>, String> {
+    breathe();
     let client = client()?;
     let response = client
         .post(ENDPOINT)
         .json(&json!({ "query": ID_QUERY, "variables": { "id": id } }))
         .send()
         .map_err(|error| format!("AniList could not be reached: {error}"))?;
+    if response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
+        return Err(RATE_LIMITED.into());
+    }
     if !response.status().is_success() {
         return Err(format!("AniList answered {}.", response.status()));
     }
@@ -544,5 +535,5 @@ pub fn anilist_by_id(id: i64) -> Result<Option<Details>, String> {
     if media["id"].as_i64().is_none() {
         return Ok(None);
     }
-    Ok(Some(build_details(&client, media)))
+    Ok(Some(build_details(&client, media)?))
 }

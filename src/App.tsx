@@ -35,6 +35,7 @@ export default function App() {
   const [aiReady, setAiReady] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [scanning, setScanning] = useState(false);
+  const [scanPaused, setScanPaused] = useState(false);
   const [scanDone, setScanDone] = useState(0);
   const [scanTotal, setScanTotal] = useState(0);
   const [news, setNews] = useState<ScanReport | null>(null);
@@ -169,6 +170,7 @@ export default function App() {
       return;
     }
     setScanning(true);
+    setScanPaused(false);
     setScanDone(0);
     setScanTotal(queue.length);
     setNews(null);
@@ -204,7 +206,7 @@ export default function App() {
         // AniList answers for every title: it is keyless and it is the only source that
         // can say whether a stored title is misspelled.
         try {
-          const { details: found, calls } = await anilistLookupDeep(anime.title);
+          const { details: found, calls } = await anilistLookupDeep(anime.title, setScanPaused);
           report.requests += calls;
           if (found) {
             const canonical = found.title;
@@ -247,6 +249,15 @@ export default function App() {
             }
           }
         } catch (cause) {
+          if (String(cause).includes("RATE_LIMIT")) {
+            // Four 65 second pauses did not clear it, so the shelf stays locked out. Stop
+            // here rather than skip: everything read so far is already saved, and the
+            // next check starts again from the same shelf.
+            report.errors.push(
+              `Stopped at ${report.checked} of ${report.total}: AniList is still limiting requests.`,
+            );
+            break;
+          }
           // Keep going, but say so: a silent failure is how titles ended up with no art.
           report.errors.push(`${anime.title}: ${describe(cause)}`);
         }
@@ -260,6 +271,7 @@ export default function App() {
       }
     } finally {
       setScanning(false);
+      setScanPaused(false);
       setNews(report);
       await reload();
     }
@@ -286,7 +298,7 @@ export default function App() {
           disabled={scanning || library === null}
           onClick={() => void runScan()}
         >
-          {scanning ? `Checking ${scanDone} of ${scanTotal}…` : "Check library"}
+          {scanPaused ? "Waiting on AniList…" : scanning ? `Checking ${scanDone} of ${scanTotal}…` : "Check library"}
         </button>
         <button type="button" className="btn" onClick={() => setSettingsOpen(true)}>
           AI settings

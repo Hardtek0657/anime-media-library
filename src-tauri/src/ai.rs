@@ -70,7 +70,14 @@ pub fn ai_clear_key() -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn ai_lookup(title: String) -> Result<Suggestion, String> {
+pub async fn ai_lookup(title: String) -> Result<Suggestion, String> {
+    // Off the window thread, like the AniList lookups: DeepSeek can take half a minute.
+    tauri::async_runtime::spawn_blocking(move || lookup(title))
+        .await
+        .map_err(|error| format!("The lookup stopped unexpectedly: {error}"))?
+}
+
+fn lookup(title: String) -> Result<Suggestion, String> {
     let title = title.trim();
     if title.is_empty() {
         return Err("Type the title first, then ask for a suggestion.".into());
