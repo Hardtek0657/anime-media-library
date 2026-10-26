@@ -1,6 +1,7 @@
 # Anime Media Library
 
-A local anime watch log. One window, one SQLite file, no account and no network calls.
+A local anime watch log. One window, one SQLite file, no account. It runs fully offline;
+a DeepSeek fill and AniList artwork are the only optional network calls.
 
 You add a title, give it seasons, and log episodes. A title shows as **Watching** once any
 episode is logged, **Completed** when every season is finished, and **Not started** before
@@ -22,13 +23,13 @@ shelf remembers it.
 - Cover art per title and per season, stored as a data URI in the same database file.
 - Author, studio and genres alongside year and format.
 - Optional DeepSeek fill: with a key added, one button fills the year, format, seasons and
-  description from the title. Off by default, and it is the only feature that uses the
-  network.
+  description from the title. Off by default, and it is the only feature that sends your
+  input off this machine.
 - `Fetch artwork and details` pulls covers and creator fields from AniList, which needs no
   key.
 - `Check library` asks DeepSeek about every title, adds seasons you are missing, raises
   episode counts that grew, and fills missing details and artwork from AniList. It reports
-  each change in a card.
+  each change in a dialog.
 - A row shows one season: the one you are in. The panel holds the full list.
 - Clicking a row opens it in place: every season with its artwork, number, episode count
   and its own `+1 ep`, plus `Edit title` and `Delete title`.
@@ -129,9 +130,9 @@ title, shown as `Checking 2 of 5…` while it runs.
 - It only adds. A season you do not have is inserted with its episode count; a season whose
   suggested count is higher is raised. Nothing is deleted, no count is lowered, watch
   progress is never touched.
-- The card above the shelf reports titles checked, requests made, and per title what was
-  added or raised. `Dismiss` closes it.
-- A failure stops the run and the error appears in the card, keeping whatever was applied
+- The report opens in a centered dialog: titles checked, requests made, and per title what
+  was added or raised. `Dismiss` closes it.
+- A failure stops the run and the error appears in the report, keeping whatever was applied
   before it. Running it again is safe, because the check only adds.
 - A new movie or spin-off is its own title, so it is not added automatically; the card says
   so.
@@ -220,8 +221,9 @@ Checked in the running app on Windows (WebView2 155), not only in a browser:
 
 ## Not included
 
-No metadata API, no cover downloads, no sync, no ratings, no import or export. Apart from
-the optional DeepSeek call, the app touches one file: its own database.
+No sync, no ratings, no import or export. Covers and creator fields come from AniList, and
+the DeepSeek fill is the other optional network use. Apart from those, the app touches one
+file: its own database.
 
 ## Development notes
 

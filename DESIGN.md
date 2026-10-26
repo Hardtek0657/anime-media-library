@@ -97,9 +97,10 @@ because the row content would otherwise be squeezed below a usable width.
 - A near duplicate is caught before the request, not after: the panel names the existing
   title and offers to open it or to continue. Checking first means the shelf cannot grow a
   second row for one show, and the user pays for no request to find that out.
-- A library check reports in a card above the shelf, not a modal and not a toast: it lists
-  what was checked, how many requests it cost, and each change. It stays until dismissed
-  because it is a record to read, not an alert to catch before it disappears.
+- A library check reports in a centered dialog, not a toast: it lists what was checked, how
+  many requests it cost, and each change. Its body scrolls, so a long report stays readable,
+  and it stays until dismissed because it is a record to read, not an alert to catch before
+  it disappears.
 
 - Hovering a season opens a card with the artwork and the production facts, at 480 by 298
   with a 184 by 264 cover. It is sized to read as a cover, not a caption: the shelf row is
