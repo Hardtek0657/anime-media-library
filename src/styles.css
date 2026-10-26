@@ -130,15 +130,39 @@ textarea::placeholder {
   color: #7b818b;
 }
 
+/* A check over a large library produces more lines than the window holds, so the report
+   is a dialog with its own scroll rather than a card in the page flow. */
+.news-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(8, 10, 13, 0.62);
+}
+
 .news {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  margin: 14px 24px 0;
-  padding: 14px 16px;
+  width: min(760px, 100%);
+  max-height: min(78vh, 660px);
+  padding: 16px 18px;
+  overflow: hidden;
   background: var(--surface-2);
   border: 1px solid var(--line-strong);
   border-radius: 6px;
+}
+
+.news-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 4px;
 }
 
 .news-head {

@@ -25,13 +25,19 @@ export function anilistLookup(title: string): Promise<AniListDetails | null> {
 }
 
 /** One call, retried once: a long check occasionally meets a rate limit or a slow answer. */
+// AniList allows about ninety requests a minute, and a season chain spends one request per
+// season, so a sweep can briefly outrun it. Two patient retries recover most of those.
 async function lookupOnce(term: string): Promise<AniListDetails | null> {
-  try {
-    return await anilistLookup(term);
-  } catch (cause) {
-    await new Promise((resolve) => setTimeout(resolve, 1500));
-    return anilistLookup(term);
+  let last: unknown;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      return await anilistLookup(term);
+    } catch (cause) {
+      last = cause;
+      await new Promise((resolve) => setTimeout(resolve, 4000));
+    }
   }
+  throw last;
 }
 
 /**
