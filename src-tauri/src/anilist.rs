@@ -33,6 +33,7 @@ query ($search: String) {
     media(search: $search, type: ANIME, sort: SEARCH_MATCH) {
       id
       title { romaji english }
+      synonyms
       description(asHtml: false)
       seasonYear
       format
@@ -62,7 +63,7 @@ query ($search: String) {
 }
 "#;
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SeasonArt {
     number: u32,
@@ -74,6 +75,9 @@ pub struct SeasonArt {
 #[serde(rename_all = "camelCase")]
 pub struct Details {
     title: String,
+    /// Every name AniList holds for this entry. A shelf title that matches one of these is
+    /// already correct, even when it is not the English one.
+    titles: Vec<String>,
     year: Option<i64>,
     format: String,
     description: Option<String>,
@@ -99,6 +103,71 @@ fn title_of(node: &Value) -> String {
         .find_map(|key| title.get(*key).and_then(Value::as_str))
         .unwrap_or("Unknown title")
         .to_string()
+}
+
+/// Every name AniList holds for the entry, so a romaji shelf title is not called a
+/// misspelling of the English one.
+fn titles_of(media: &Value) -> Vec<String> {
+    let mut names: Vec<String> = Vec::new();
+    let mut push = |name: &str| {
+        let name = name.trim();
+        if !name.is_empty() && !names.iter().any(|held| held == name) {
+            names.push(name.to_string());
+        }
+    };
+    for field in ["romaji", "english"] {
+        if let Some(name) = media["title"][field].as_str() {
+            push(name);
+        }
+    }
+    for name in media["synonyms"].as_array().into_iter().flatten() {
+        if let Some(name) = name.as_str() {
+            push(name);
+        }
+    }
+    names
+}
+
+/// Lowercase letters and digits only, one space between words, so punctuation and spacing
+/// never decide whether two names are the same show.
+fn normalize(title: &str) -> String {
+    let mut out = String::with_capacity(title.len());
+    for character in title.chars().flat_map(char::to_lowercase) {
+        if character.is_alphanumeric() {
+            out.push(character);
+        } else if !out.is_empty() && !out.ends_with(' ') {
+            out.push(' ');
+        }
+    }
+    out.trim_end().to_string()
+}
+
+fn edit_distance(left: &str, right: &str) -> usize {
+    let left: Vec<char> = left.chars().collect();
+    let right: Vec<char> = right.chars().collect();
+    let mut previous: Vec<usize> = (0..=right.len()).collect();
+    let mut current = vec![0usize; right.len() + 1];
+    for i in 1..=left.len() {
+        current[0] = i;
+        for j in 1..=right.len() {
+            let cost = usize::from(left[i - 1] != right[j - 1]);
+            current[j] = (previous[j] + 1)
+                .min(current[j - 1] + 1)
+                .min(previous[j - 1] + cost);
+        }
+        std::mem::swap(&mut previous, &mut current);
+    }
+    previous[right.len()]
+}
+
+/// How far one of the entry's names is from the term that was searched for.
+fn title_distance(term: &str, media: &Value) -> usize {
+    let needle = normalize(term);
+    titles_of(media)
+        .iter()
+        .map(|name| edit_distance(&needle, &normalize(name)))
+        .min()
+        .unwrap_or(usize::MAX)
 }
 
 fn format_label(raw: Option<&str>) -> String {
@@ -233,13 +302,13 @@ fn breathe() {
     std::thread::sleep(Duration::from_millis(700));
 }
 
-/// One search request. AniList answers an empty page rather than an error when nothing
-/// matches, which is what lets a misspelled title be retried against a shorter term.
-fn search_once(client: &Client, term: &str) -> Result<Option<Value>, String> {
+/// One request, with the two shapes AniList uses to say "slow down" turned into the error
+/// the front end recognises.
+fn post(client: &Client, query: &str, variables: Value) -> Result<Value, String> {
     breathe();
     let response = client
         .post(ENDPOINT)
-        .json(&json!({ "query": QUERY, "variables": { "search": term } }))
+        .json(&json!({ "query": query, "variables": variables }))
         .send()
         .map_err(|error| format!("AniList could not be reached: {error}"))?;
 
@@ -260,11 +329,68 @@ fn search_once(client: &Client, term: &str) -> Result<Option<Value>, String> {
         }
         return Err("AniList rejected the search.".into());
     }
+    Ok(body)
+}
+
+/// One search request. AniList answers an empty page rather than an error when nothing
+/// matches, which is what lets a misspelled title be retried against a shorter term.
+fn search_once(client: &Client, term: &str) -> Result<Option<Value>, String> {
+    let body = post(client, QUERY, json!({ "search": term }))?;
     Ok(body["data"]["Page"]["media"]
         .as_array()
         .and_then(|items| items.first())
         .filter(|media| media["id"].as_i64().is_some())
         .cloned())
+}
+
+/// Ids and names only: used to re-rank a search whose first hit was a spin-off, without
+/// paying for descriptions and relations on ten entries.
+const RANK_QUERY: &str = r#"
+query ($search: String) {
+  Page(perPage: 10) {
+    media(search: $search, type: ANIME, sort: SEARCH_MATCH) {
+      id
+      title { romaji english }
+      synonyms
+    }
+  }
+}
+"#;
+
+fn rank_page(client: &Client, term: &str) -> Result<Vec<Value>, String> {
+    let body = post(client, RANK_QUERY, json!({ "search": term }))?;
+    Ok(body["data"]["Page"]["media"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|media| media["id"].as_i64().is_some())
+        .collect())
+}
+
+/// AniList ranks by its own idea of relevance, and that idea puts spin-offs first: asking
+/// for "Frieren: Beyond Journey's End" answered with a 12 episode ONA special, so the show
+/// itself kept its 12 episode count. Hits are judged against the title the shelf holds, not
+/// against the shorter term that was searched, or a generic term would win by being short:
+/// "The Daily Life" once picked a two episode OVA named "Koiko's Daily Life".
+fn search_best(client: &Client, term: &str, shelf: &str) -> Result<Option<Value>, String> {
+    let Some(hit) = search_once(client, term)? else {
+        return Ok(None);
+    };
+    let slack = 2 + normalize(shelf).chars().count() / 8;
+    if title_distance(shelf, &hit) <= slack {
+        return Ok(Some(hit));
+    }
+    let Some(best) = rank_page(client, term)?
+        .into_iter()
+        .min_by_key(|media| title_distance(shelf, media))
+    else {
+        return Ok(Some(hit));
+    };
+    let Some(id) = best["id"].as_i64() else {
+        return Ok(Some(hit));
+    };
+    Ok(Some(fetch_entry(client, id)?.unwrap_or(hit)))
 }
 
 /// A typo breaks AniList's search, so the full title is tried first, then the part before
@@ -319,8 +445,13 @@ fn sequel_of(media: &Value) -> Option<i64> {
         .as_array()?
         .iter()
         .find(|edge| {
+            // Chinese donghua seasons are filed as ONA, so a TV-only filter broke the chain
+            // after season one ("The Daily Life of the Immortal King" stopped at 15 episodes).
             edge["relationType"] == "SEQUEL"
-                && matches!(edge["node"]["format"].as_str(), Some("TV") | Some("TV_SHORT"))
+                && matches!(
+                    edge["node"]["format"].as_str(),
+                    Some("TV") | Some("TV_SHORT") | Some("ONA")
+                )
         })?["node"]["id"]
         .as_i64()
 }
@@ -374,6 +505,7 @@ fn build_details(client: &Client, media: &Value) -> Result<Details, String> {
 
     Ok(Details {
         title: title_of(media),
+        titles: titles_of(media),
         year: media["seasonYear"].as_i64(),
         format: format_label(media["format"].as_str()),
         description,
@@ -394,7 +526,7 @@ fn lookup(title: String) -> Result<Option<Details>, String> {
     let client = client()?;
     let mut found = None;
     for term in search_terms(&title) {
-        found = search_once(&client, &term)?;
+        found = search_best(&client, &term, &title)?;
         if found.is_some() {
             break;
         }
@@ -480,6 +612,7 @@ query ($id: Int) {
   Media(id: $id, type: ANIME) {
     id
     title { romaji english }
+    synonyms
     description(asHtml: false)
     seasonYear
     format
@@ -536,4 +669,91 @@ fn by_id(id: i64) -> Result<Option<Details>, String> {
         return Ok(None);
     }
     Ok(Some(build_details(&client, media)?))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn normalizes_punctuation_and_case() {
+        assert_eq!(
+            normalize("Sousou no Frieren: ●● no Mahou"),
+            "sousou no frieren no mahou"
+        );
+        assert_eq!(normalize("  Rent-a-Girlfriend "), "rent a girlfriend");
+    }
+
+    #[test]
+    fn counts_edits_between_names() {
+        assert_eq!(edit_distance("immportal", "immortal"), 1);
+        assert_eq!(edit_distance("same", "same"), 0);
+    }
+
+    #[test]
+    fn measures_the_closest_name() {
+        let entry = json!({
+            "title": { "romaji": "Sousou no Frieren", "english": "Frieren: Beyond Journey’s End" },
+            "synonyms": ["Frieren"]
+        });
+        // A straight apostrophe and a curly one are the same name.
+        assert_eq!(title_distance("Frieren: Beyond Journey's End", &entry), 0);
+        assert_eq!(title_distance("Sousou no Frieren", &entry), 0);
+    }
+
+    #[test]
+    fn follows_a_sequel_filed_as_ona() {
+        let entry = json!({ "relations": { "edges": [
+            { "relationType": "SEQUEL", "node": { "id": 7, "format": "ONA" } }
+        ] } });
+        assert_eq!(sequel_of(&entry), Some(7));
+    }
+
+    #[test]
+    fn leaves_a_movie_out_of_the_season_chain() {
+        let entry = json!({ "relations": { "edges": [
+            { "relationType": "SEQUEL", "node": { "id": 9, "format": "MOVIE" } }
+        ] } });
+        assert_eq!(sequel_of(&entry), None);
+    }
+
+    /// The two cases that were wrong in the field. Run with:
+    /// `cargo test --lib live_lookup -- --ignored --nocapture`
+    #[test]
+    #[ignore = "asks the real AniList API"]
+    fn live_lookup_picks_the_series_and_its_ona_seasons() {
+        let frieren = lookup("Frieren: Beyond Journey's End".into())
+            .expect("lookup failed")
+            .expect("no entry for Frieren");
+        assert!(
+            frieren.titles.iter().any(|name| name == "Sousou no Frieren"),
+            "romaji name missing: {:?}",
+            frieren.titles
+        );
+        assert!(
+            frieren.seasons[0].episodes.unwrap_or(0) > 12,
+            "matched the 12 episode special: {:?}",
+            frieren.seasons
+        );
+
+        let king = lookup("The Daily Life of the Immportal King".into())
+            .expect("lookup failed")
+            .expect("the typo was not rescued by a shorter search term");
+        let shape: Vec<(u32, Option<u32>)> = king
+            .seasons
+            .iter()
+            .map(|season| (season.number, season.episodes))
+            .collect();
+        assert!(
+            king.seasons.len() >= 5,
+            "the ONA sequel chain stopped early: {:?} from {:?}",
+            shape,
+            king.titles
+        );
+        assert!(
+            king.titles.iter().any(|name| name.contains("Immortal King")),
+            "English name missing: {:?}",
+            king.titles
+        );
+    }
 }
