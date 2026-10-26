@@ -175,50 +175,6 @@ The interface is a dark shelf: ink and bone, one amber accent, serif titles, and
 spine per row whose colour is derived from the title. Details and the reasoning are in
 [DESIGN.md](DESIGN.md).
 
-## Verified
-
-Checked in the running app on Windows (WebView2 155), not only in a browser:
-
-- First launch creates the schema and shows the empty state with the add action.
-- Adding a title with one season and 3 of 28 episodes saved it as Watching.
-- `+1 ep` took that season from 3/28 to 4/28 and the count survived a reload.
-- Setting the last episode of the final season moved the title to Completed, and the rail
-  count followed.
-- Filters and search: Watching, Completed and the empty result state each show the right
-  rows; searching a title narrows the list to it.
-- An empty title and a zero episode count are both refused, with the message inside the
-  panel.
-- Delete asks for confirmation, then removes the title and its seasons.
-- Escape closes the detail panel.
-- A row renders exactly one season and stays 69 px tall whatever the season count. With
-  season 1 finished, season 2 at 5 of 12 and season 3 untouched, the row showed `S2 5/12`;
-  with every episode watched it showed the last season, `S3 12/12`.
-- Order with a temporary `Aaa Temp Show` and `Zzz Temp Movie` was Aaa, Absolute Duo,
-  Arifureta, Zzz, which is case-insensitive alphabetical rather than upper-before-lower.
-- With a TV and a Movie title present, the header showed `All formats`, `TV` and `Movie`.
-  Picking `Movie` left only that row, the count read `1 title · Movie`, and the shelf counts
-  followed (All 1, Not started 1). Returning to `All formats` restored both rows.
-- Adding a title that already exists, `absolute duo` in different case, was refused with
-  "“Absolute Duo” is already on the shelf. Open that entry instead." and no row was created.
-- A season numbered 2.5 saved, showed as S2.5 with its own 6 of 12 progress, and survived a
-  reload. Renaming season 2 to 2.5 replaced the old row instead of leaving a duplicate.
-- Two seasons with the same number are refused with "Season 2.5 is listed twice."
-- With no key saved, the panel says so and offers `Add one`; the dialog reports `No key
-  saved.` and stores nothing.
-- Saving a key reports `A key is saved.` and adds `Remove key`; removing it returns the
-  panel to the no key hint.
-- Asking DeepSeek with a deliberately wrong key showed "DeepSeek rejected the API key.
-  Check it in AI settings." in the panel, with the draft untouched.
-- A description typed in the panel saved, reopened with the same text, and the temporary
-  title was deleted afterwards.
-- `Check library` with a deliberately incomplete `Mushoku Tensei` entry (one season at 12
-  episodes) made 5 requests and reported "added S2 (25 eps). grew S1 12 to 23 eps."; that
-  entry then held 23 and 25 episodes.
-- The four accurate titles in the same run produced no changes, so the card only lists real
-  findings, and dismissing it left the shelf as it was.
-- `pnpm tauri build` produced a working bundle, and the packaged executable opened the same
-  library from the same database file.
-
 ## Not included
 
 No sync, no ratings, no import or export. Covers and creator fields come from AniList, and
