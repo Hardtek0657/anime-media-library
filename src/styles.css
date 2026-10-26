@@ -172,6 +172,19 @@ textarea::placeholder {
   gap: 12px;
 }
 
+/* Copy and Dismiss sit together on the right. The copy label changes for two seconds, so
+   both buttons keep one width and the header never shifts under the pointer. */
+.news-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.news-actions .quiet {
+  min-width: 88px;
+  text-align: center;
+}
+
 .news-title {
   margin: 0;
   font-family: var(--serif);

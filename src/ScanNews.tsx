@@ -1,5 +1,24 @@
-import { useEffect } from "react";
-import type { ScanReport } from "./lib/scan";
+import { useEffect, useState } from "react";
+import { scanLogText, type ScanReport } from "./lib/scan";
+
+/** WebView2 can refuse the async clipboard API, so the hidden textarea is the fallback. */
+async function copyText(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    const area = document.createElement("textarea");
+    area.value = text;
+    area.setAttribute("readonly", "");
+    area.style.position = "fixed";
+    area.style.opacity = "0";
+    document.body.append(area);
+    area.select();
+    const copied = document.execCommand("copy");
+    area.remove();
+    return copied;
+  }
+}
 
 export function ScanNews({
   report,
@@ -11,6 +30,7 @@ export function ScanNews({
   onDismiss: () => void;
 }) {
   const found = report.changes.length + report.details.length + report.renames.length;
+  const [copied, setCopied] = useState<"idle" | "yes" | "no">("idle");
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -19,6 +39,16 @@ export function ScanNews({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onDismiss]);
+
+  useEffect(() => {
+    if (copied === "idle") return;
+    const timer = window.setTimeout(() => setCopied("idle"), 2000);
+    return () => window.clearTimeout(timer);
+  }, [copied]);
+
+  async function copyLog() {
+    setCopied((await copyText(scanLogText(report))) ? "yes" : "no");
+  }
 
   return (
     <div className="news-scrim" onClick={onDismiss}>
@@ -37,10 +67,22 @@ export function ScanNews({
                 ? "Library check found updates"
                 : "Library check found nothing new"}
           </h2>
-          <button type="button" className="quiet" onClick={onDismiss}>
-            Dismiss
-          </button>
+          <div className="news-actions">
+            <button type="button" className="quiet" onClick={() => void copyLog()}>
+              {copied === "yes" ? "Copied" : copied === "no" ? "Copy failed" : "Copy log"}
+            </button>
+            <button type="button" className="quiet" onClick={onDismiss}>
+              Dismiss
+            </button>
+          </div>
         </div>
+        <p className="sr-only" role="status">
+          {copied === "yes"
+            ? "Log copied to the clipboard."
+            : copied === "no"
+              ? "Could not copy. Select the log text and copy it yourself."
+              : ""}
+        </p>
         <div className="news-body">
           <p className="news-summary">
             Checked {report.checked} of {report.total}{" "}
