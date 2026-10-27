@@ -25,30 +25,49 @@ function editDistance(left: string, right: string): number {
   return previous[right.length];
 }
 
+/** Quotes are the same character in a different costume, so ’ and ' never cause a rename. */
+function foldQuotes(title: string): string {
+  return title
+    .replace(/[\u2018\u2019\u201A\u201B\u2032]/g, "'")
+    .replace(/[\u201C\u201D\u201E\u201F\u2033]/g, '"')
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 /**
  * The name a shelf entry should carry instead of `stored`, or null when it already matches
- * one of AniList's names. A romaji shelf title is not a misspelling of the English one, so
- * an exact match on any variant settles it; only a typo of a real variant is renamed, and
- * then to that variant rather than to whichever name AniList happens to display.
+ * one of AniList's names. A romaji shelf title is not a misspelling of the English one, so a
+ * match on any variant settles it. What is left is a different spelling of a known name —
+ * a typo, capitalization or punctuation — and the suggestion is the variant it differs
+ * from, not whichever name AniList happens to display.
  */
 export function renameSuggestion(stored: string, variants: string[]): string | null {
-  const needle = normalizeTitle(stored);
-  const names = variants.map((name) => name.trim()).filter((name) => name !== "");
-  if (names.some((name) => normalizeTitle(name) === needle)) return null;
+  const name = stored.trim();
+  const names = variants.map((value) => value.trim()).filter((value) => value !== "");
+  if (names.includes(name)) return null;
+  // The words and the words' punctuation already agree; only the quote glyph differs.
+  if (names.some((value) => foldQuotes(value) === foldQuotes(name))) return null;
+  return closestName(name, names);
+}
 
-  let best: string | null = null;
-  let bestDistance = Number.POSITIVE_INFINITY;
-  for (const name of names) {
-    const candidate = normalizeTitle(name);
-    if (candidate.length < 6) continue;
-    const allowed = Math.max(1, Math.floor(Math.max(needle.length, candidate.length) / 7));
-    const distance = editDistance(needle, candidate);
-    if (distance <= allowed && distance < bestDistance) {
-      best = name;
-      bestDistance = distance;
-    }
+function closestName(name: string, names: string[]): string | null {
+  const needle = normalizeTitle(name);
+  const sameWords = names.filter((value) => normalizeTitle(value) === needle);
+  const pool =
+    sameWords.length > 0
+      ? sameWords
+      : names.filter((value) => {
+          const candidate = normalizeTitle(value);
+          if (candidate.length < 6) return false;
+          const allowed = Math.max(1, Math.floor(Math.max(needle.length, candidate.length) / 7));
+          return editDistance(needle, candidate) <= allowed;
+        });
+  if (pool.length === 0) return null;
+  let best = pool[0];
+  for (const value of pool) {
+    if (editDistance(name, value) < editDistance(name, best)) best = value;
   }
-  return best === stored ? null : best;
+  return best === name ? null : best;
 }
 
 export function findSimilarTitle(

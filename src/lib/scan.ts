@@ -39,9 +39,9 @@ export function scanLogText(report: ScanReport): string {
   ];
 
   if (report.renames.length > 0) {
-    lines.push("", "Misspelled titles");
+    lines.push("", "Name differences");
     for (const rename of report.renames) {
-      lines.push(`- ${rename.from} looks misspelled; AniList lists ${rename.to}.`);
+      lines.push(`- ${rename.from} → ${rename.to}, AniList's spelling.`);
     }
   }
   if (report.changes.length > 0) {
@@ -74,7 +74,7 @@ export function scanLogText(report: ScanReport): string {
   if (found === 0 && report.errors.length === 0) {
     lines.push(
       "",
-      "No new seasons, no higher episode counts, no misspelled titles and no missing details.",
+      "No new seasons, no higher episode counts, no name differences and no missing details.",
     );
   }
   return lines.join("\n");
