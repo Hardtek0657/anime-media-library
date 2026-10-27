@@ -103,3 +103,32 @@ export function planChange(
   grown.sort((left, right) => left.number - right.number);
   return { title: anime.title, added, grown };
 }
+
+/**
+ * True when the shelf is split finer than the source: AniList keeps "Black Clover" as one
+ * 170 episode run, and a shelf holding four parts must not be flattened back to one.
+ */
+export function keepsOwnSplit(heldSeasons: number, sourceSeasons: number): boolean {
+  return sourceSeasons <= 1 && heldSeasons > 1;
+}
+
+/**
+ * Folds counted growth into what the model already reported, so one title stays one line.
+ * A season the model added is never also reported as grown.
+ */
+export function mergeGrowth(
+  change: ScanChange | null,
+  title: string,
+  grown: SeasonGrow[],
+): ScanChange | null {
+  if (!change && grown.length === 0) return null;
+  const merged: ScanChange = change ?? { title, added: [], grown: [] };
+  for (const entry of grown) {
+    if (merged.added.some((season) => season.number === entry.number)) continue;
+    const existing = merged.grown.find((season) => season.number === entry.number);
+    if (!existing) merged.grown.push({ ...entry });
+    else if (entry.to > existing.to) existing.to = entry.to;
+  }
+  merged.grown.sort((left, right) => left.number - right.number);
+  return merged;
+}

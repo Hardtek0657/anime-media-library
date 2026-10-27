@@ -5,6 +5,10 @@ const ACCOUNT: &str = "deepseek";
 const ENDPOINT: &str = "https://api.deepseek.com/chat/completions";
 const MODEL: &str = "deepseek-chat";
 
+/// No key, a rejected key or an empty balance fails the same way for every title, so the
+/// front end stops asking and says it once instead of once per row.
+const DISABLED: &str = "AI_DISABLED";
+
 const PROMPT: &str = "You complete entries in a personal anime catalogue. Reply with one JSON object and nothing else. Use only facts you are confident about; omit a field when you do not know it. Shape: {\"title\": string, \"year\": number or null, \"format\": \"TV\" or \"Movie\" or \"OVA\" or \"ONA\" or \"Special\", \"seasons\": [{\"number\": number, \"episodes\": number}], \"description\": string}. seasons lists every season in order with its episode count; use 2.5 style numbers for half seasons. description is at most two sentences. No markdown, no code fences.";
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -84,7 +88,7 @@ fn lookup(title: String) -> Result<Suggestion, String> {
     }
     let key = entry()?
         .get_password()
-        .map_err(|_| "No API key saved yet. Add one in AI settings.".to_string())?;
+        .map_err(|_| format!("{DISABLED} No API key saved yet. Add one in AI settings."))?;
     let client = reqwest::blocking::Client::builder()
         .timeout(std::time::Duration::from_secs(30))
         .build()
@@ -142,8 +146,8 @@ fn ask(
 
 fn http_error(status: u16, detail: &str) -> String {
     match status {
-        401 => "DeepSeek rejected the API key. Check it in AI settings.".to_string(),
-        402 => "The DeepSeek account has no balance.".to_string(),
+        401 => format!("{DISABLED} DeepSeek rejected the API key. Check it in AI settings."),
+        402 => format!("{DISABLED} The DeepSeek account has no balance."),
         429 => "DeepSeek is rate limiting. Try again in a moment.".to_string(),
         _ => {
             let trimmed: String = detail.chars().take(200).collect();
@@ -269,6 +273,18 @@ mod tests {
     #[test]
     fn refuses_non_json() {
         assert!(parse_answer("I could not find that.", "x").is_err());
+    }
+
+    #[test]
+    fn marks_a_key_or_balance_problem_as_disabled() {
+        for status in [401, 402] {
+            assert!(
+                http_error(status, "").starts_with(DISABLED),
+                "status {status} must stop the run"
+            );
+        }
+        assert!(!http_error(429, "").contains(DISABLED));
+        assert!(!http_error(500, "boom").contains(DISABLED));
     }
 
     #[test]

@@ -10,12 +10,19 @@ import {
   applyDetails,
   applyScan,
   deleteAnime as removeAnime,
+  growSeasons,
   loadLibrary,
   renameAnime,
   saveAnime as persistAnime,
   type AnimeDraft,
 } from "./lib/db";
-import { planChange, type ScanReport } from "./lib/scan";
+import {
+  mergeGrowth,
+  planChange,
+  type ScanChange,
+  type ScanReport,
+  type SeasonGrow,
+} from "./lib/scan";
 import { renameSuggestion } from "./lib/similar";
 import { statusOf, type Anime, type AnimeFormat, type Filter, type Season } from "./lib/model";
 
@@ -188,19 +195,31 @@ export default function App() {
       // stop the whole run, which left later titles without art or details. Three
       // failures in a row is the case where the key or the network is gone.
       let consecutiveFailures = 0;
+      let aiUsable = true;
       for (const anime of queue) {
         let aiFailure: string | null = null;
+        let aiChange: ScanChange | null = null;
+        let grown: SeasonGrow[] = [];
         let resolved = false;
-        try {
-          const answer = await aiLookup(anime.title);
-          report.requests += 1;
-          const change = planChange(anime, answer.seasons);
-          if (change) {
-            await applyScan(anime.id, change.added, change.grown);
-            report.changes.push(change);
+        if (aiUsable) {
+          try {
+            const answer = await aiLookup(anime.title);
+            report.requests += 1;
+            aiChange = planChange(anime, answer.seasons);
+            if (aiChange) await applyScan(anime.id, aiChange.added, aiChange.grown);
+          } catch (cause) {
+            const reason = describe(cause);
+            if (reason.includes("AI_DISABLED")) {
+              // No key, no balance or a rejected key fails the same way for every title, so
+              // say it once and spend the rest of the run on AniList alone.
+              aiUsable = false;
+              report.errors.push(
+                `DeepSeek skipped: ${reason.replace("AI_DISABLED", "").trim()}`,
+              );
+            } else {
+              aiFailure = `${anime.title}: ${reason}`;
+            }
           }
-        } catch (cause) {
-          aiFailure = `${anime.title}: ${describe(cause)}`;
         }
 
         // AniList answers for every title: it is keyless and it is the only source that
@@ -244,6 +263,10 @@ export default function App() {
             if (fields.length > 0) {
               report.details.push({ title: anime.title, fields });
             }
+
+            // AniList knows the true episode count even when it files the whole run as one
+            // season, which is the only way a stale count gets corrected.
+            grown = await growSeasons(anime.id, found.seasons);
           }
         } catch (cause) {
           if (String(cause).includes("RATE_LIMIT")) {
@@ -258,6 +281,9 @@ export default function App() {
           // Keep going, but say so: a silent failure is how titles ended up with no art.
           report.errors.push(`${anime.title}: ${describe(cause)}`);
         }
+
+        const change = mergeGrowth(aiChange, anime.title, grown);
+        if (change) report.changes.push(change);
 
         // AniList filled the entry, so a model that rambled about the same title is noise:
         // the user asked what changed on the shelf, not which service had a bad minute.

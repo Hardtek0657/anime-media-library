@@ -755,5 +755,21 @@ mod tests {
             "English name missing: {:?}",
             king.titles
         );
+
+        // One continuous run: AniList has no four part split for this show, so the check can
+        // only be expected to correct the count, never to invent the parts.
+        let clover = lookup("Black Clover".into())
+            .expect("lookup failed")
+            .expect("no entry for Black Clover");
+        assert_eq!(
+            clover.seasons.first().and_then(|season| season.episodes),
+            Some(170),
+            "Black Clover is filed as one season: {:?}",
+            clover
+                .seasons
+                .iter()
+                .map(|season| (season.number, season.episodes))
+                .collect::<Vec<_>>()
+        );
     }
 }

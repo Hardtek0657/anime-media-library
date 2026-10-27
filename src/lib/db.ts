@@ -1,5 +1,6 @@
 import Database from "@tauri-apps/plugin-sql";
 import type { Anime, AnimeFormat, Season } from "./model";
+import { keepsOwnSplit } from "./scan";
 
 // Must match the migrations URL in src-tauri/src/lib.rs. A relative sqlite name is
 // resolved against the app config dir, not the process directory, so the file always
@@ -217,6 +218,42 @@ export async function applyScan(
       [season.to, animeId, season.number],
     );
   }
+}
+
+/**
+ * Raises the episode count of seasons the table already holds to what a source says. Reads
+ * the rows first, so it is safe to call after another step added seasons in the same run.
+ *
+ * A source that sees one continuous run must not flatten a split the owner made: when it
+ * offers a single season and the table holds several, nothing changes. AniList keeps
+ * "Black Clover" as one 170 episode entry, and a four part shelf must survive that.
+ */
+export async function growSeasons(
+  animeId: number,
+  suggested: { number: number; episodes: number | null }[],
+): Promise<{ number: number; from: number; to: number }[]> {
+  const known = suggested.filter(
+    (season): season is { number: number; episodes: number } => season.episodes !== null,
+  );
+  const conn = await db();
+  const held = await conn.select<{ number: number; episode_count: number }[]>(
+    "SELECT number, episode_count FROM season WHERE anime_id = ?",
+    [animeId],
+  );
+  if (keepsOwnSplit(held.length, known.length)) return [];
+
+  const grown: { number: number; from: number; to: number }[] = [];
+  for (const season of known) {
+    const row = held.find((entry) => entry.number === season.number);
+    if (!row || row.episode_count >= season.episodes) continue;
+    await conn.execute(
+      "UPDATE season SET episode_count = ? WHERE anime_id = ? AND number = ?",
+      [season.episodes, animeId, season.number],
+    );
+    grown.push({ number: season.number, from: row.episode_count, to: season.episodes });
+  }
+  grown.sort((left, right) => left.number - right.number);
+  return grown;
 }
 
 /** What AniList answered, reduced to the fields the shelf can use. */
