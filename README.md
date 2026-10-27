@@ -29,7 +29,8 @@ shelf remembers it.
   key.
 - `Check library` asks DeepSeek about every title, adds seasons you are missing, raises
   episode counts that grew, and fills missing details and artwork from AniList. It reports
-  each change in a dialog.
+  each change in a dialog. A show AniList keeps as one continuous run stays one season:
+  the check corrects the episode count and leaves a split you made alone.
 - A row shows one season: the one you are in. The panel holds the full list.
 - Clicking a row opens it in place: every season with its artwork, number, episode count
   and its own `+1 ep`, plus `Edit title` and `Delete title`.
