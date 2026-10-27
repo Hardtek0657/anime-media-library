@@ -189,18 +189,18 @@ export default function App() {
       // failures in a row is the case where the key or the network is gone.
       let consecutiveFailures = 0;
       for (const anime of queue) {
+        let aiFailure: string | null = null;
+        let resolved = false;
         try {
           const answer = await aiLookup(anime.title);
           report.requests += 1;
-          consecutiveFailures = 0;
           const change = planChange(anime, answer.seasons);
           if (change) {
             await applyScan(anime.id, change.added, change.grown);
             report.changes.push(change);
           }
         } catch (cause) {
-          consecutiveFailures += 1;
-          report.errors.push(`${anime.title}: ${describe(cause)}`);
+          aiFailure = `${anime.title}: ${describe(cause)}`;
         }
 
         // AniList answers for every title: it is keyless and it is the only source that
@@ -209,6 +209,7 @@ export default function App() {
           const { details: found, calls } = await anilistLookupDeep(anime.title, setScanPaused);
           report.requests += calls;
           if (found) {
+            resolved = true;
             // AniList knows every name the entry goes by; only a name that matches none of
             // them is a misspelling, so a romaji title is never "corrected" to the English.
             const to = renameSuggestion(anime.title, found.titles);
@@ -258,10 +259,20 @@ export default function App() {
           report.errors.push(`${anime.title}: ${describe(cause)}`);
         }
 
+        // AniList filled the entry, so a model that rambled about the same title is noise:
+        // the user asked what changed on the shelf, not which service had a bad minute.
+        // Only a title neither service could answer counts toward stopping the run.
+        if (aiFailure && !resolved) {
+          report.errors.push(aiFailure);
+          consecutiveFailures += 1;
+        } else {
+          consecutiveFailures = 0;
+        }
+
         report.checked += 1;
         setScanDone(report.checked);
         if (consecutiveFailures >= 3) {
-          report.errors.push("Stopped after three failures in a row. Check the key and run it again.");
+          report.errors.push("Stopped after three titles in a row that neither service could answer. Check the key and the network.");
           break;
         }
       }

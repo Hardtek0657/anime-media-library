@@ -85,7 +85,28 @@ fn lookup(title: String) -> Result<Suggestion, String> {
     let key = entry()?
         .get_password()
         .map_err(|_| "No API key saved yet. Add one in AI settings.".to_string())?;
+    let client = reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .map_err(|error| error.to_string())?;
 
+    match parse_answer(&ask(&client, &key, title, 0.2)?, title) {
+        Ok(answer) => Ok(answer),
+        // A model that answers in prose once usually does better on a second, colder pass.
+        // One retry is cheaper than making the user read a problem for a title it knows.
+        Err(error) => match ask(&client, &key, title, 0.0) {
+            Ok(content) => parse_answer(&content, title).map_err(|_| error),
+            Err(retry) => Err(retry),
+        },
+    }
+}
+
+fn ask(
+    client: &reqwest::blocking::Client,
+    key: &str,
+    title: &str,
+    temperature: f64,
+) -> Result<String, String> {
     let body = serde_json::json!({
         "model": MODEL,
         "messages": [
@@ -93,14 +114,11 @@ fn lookup(title: String) -> Result<Suggestion, String> {
             { "role": "user", "content": format!("Title: {title}") }
         ],
         "response_format": { "type": "json_object" },
-        "temperature": 0.2,
-        "max_tokens": 700
+        "temperature": temperature,
+        "max_tokens": 1000
     });
 
-    let response = reqwest::blocking::Client::builder()
-        .timeout(std::time::Duration::from_secs(30))
-        .build()
-        .map_err(|error| error.to_string())?
+    let response = client
         .post(ENDPOINT)
         .bearer_auth(key)
         .json(&body)
@@ -116,11 +134,10 @@ fn lookup(title: String) -> Result<Suggestion, String> {
     let payload: serde_json::Value = response
         .json()
         .map_err(|error| format!("DeepSeek sent something unreadable: {error}"))?;
-    let content = payload["choices"][0]["message"]["content"]
+    payload["choices"][0]["message"]["content"]
         .as_str()
-        .ok_or("DeepSeek returned no text.")?;
-
-    parse_answer(content, title)
+        .map(str::to_string)
+        .ok_or_else(|| "DeepSeek returned no text.".to_string())
 }
 
 fn http_error(status: u16, detail: &str) -> String {
@@ -135,13 +152,17 @@ fn http_error(status: u16, detail: &str) -> String {
     }
 }
 
+/// The object between the first brace and the last, so a sentence before it or a code fence
+/// around it does not throw away an answer that is otherwise fine.
+fn json_object(text: &str) -> Option<&str> {
+    let start = text.find('{')?;
+    let end = text.rfind('}')?;
+    (end > start).then(|| &text[start..=end])
+}
+
 fn parse_answer(content: &str, fallback_title: &str) -> Result<Suggestion, String> {
-    let text = content
-        .trim()
-        .trim_start_matches("```json")
-        .trim_start_matches("```")
-        .trim_end_matches("```")
-        .trim();
+    let trimmed = content.trim();
+    let text = json_object(trimmed).unwrap_or(trimmed);
     let answer: ModelAnswer = serde_json::from_str(text)
         .map_err(|_| "DeepSeek did not return the expected JSON.".to_string())?;
 
@@ -248,5 +269,26 @@ mod tests {
     #[test]
     fn refuses_non_json() {
         assert!(parse_answer("I could not find that.", "x").is_err());
+    }
+
+    #[test]
+    fn reads_the_object_out_of_surrounding_text() {
+        let answer = parse_answer(
+            "Sure! Here it is:\n{\"title\":\"Berserk\",\"seasons\":[{\"number\":1,\"episodes\":25}]}\nHope that helps.",
+            "berserk",
+        )
+        .unwrap();
+        assert_eq!(answer.title, "Berserk");
+        assert_eq!(answer.seasons.len(), 1);
+    }
+
+    #[test]
+    fn reads_a_fence_with_a_trailing_sentence() {
+        let answer = parse_answer(
+            "```json\n{\"title\":\"Monster\",\"seasons\":[{\"number\":1,\"episodes\":74}]}\n```\nThat is the one.",
+            "monster",
+        )
+        .unwrap();
+        assert_eq!(answer.seasons, vec![SeasonSuggestion { number: 1.0, episodes: 74 }]);
     }
 }
