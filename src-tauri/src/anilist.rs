@@ -456,12 +456,116 @@ fn sequel_of(media: &Value) -> Option<i64> {
         .as_i64()
 }
 
-/// The seasons in order: this entry, then every TV sequel after it.
-fn season_chain(client: &Client, media: &Value) -> Result<Vec<Value>, String> {
+/// The source an entry adapts, when it is a comic or a novel: a manga node is where a
+/// franchise's separate anime runs meet.
+fn source_of(media: &Value) -> Option<i64> {
+    media["relations"]["edges"]
+        .as_array()?
+        .iter()
+        .find(|edge| {
+            edge["relationType"] == "ADAPTATION"
+                && matches!(edge["node"]["type"].as_str(), Some("MANGA") | Some("LIGHT_NOVEL"))
+        })?["node"]["id"]
+        .as_i64()
+}
+
+fn alternative_ids(media: &Value) -> Vec<i64> {
+    media["relations"]["edges"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|edge| edge["relationType"] == "ALTERNATIVE")
+        .filter_map(|edge| edge["node"]["id"].as_i64())
+        .collect()
+}
+
+/// AniList links seasons with SEQUEL, but a franchise can also continue as a separate
+/// adaptation of the same source: the 1997 "Berserk" has no sequel, while the 2016 run
+/// adapts the same manga. Pick the earliest later TV run that is not marked as an
+/// alternative, because a remake is exactly that ("Hunter x Hunter" 2011 is an alternative
+/// of the 1999 run, so it is never appended as a season).
+fn pick_later_run(edges: &[Value], alternatives: &[i64], year: Option<i64>) -> Option<Value> {
+    let mut best: Option<&Value> = None;
+    for edge in edges {
+        if edge["relationType"] != "ADAPTATION" {
+            continue;
+        }
+        let node = &edge["node"];
+        if node["type"] != "ANIME" {
+            continue;
+        }
+        if !matches!(node["format"].as_str(), Some("TV") | Some("TV_SHORT") | Some("ONA")) {
+            continue;
+        }
+        if node["episodes"].as_u64().is_none() {
+            continue;
+        }
+        let Some(id) = node["id"].as_i64() else {
+            continue;
+        };
+        if alternatives.contains(&id) {
+            continue;
+        }
+        let Some(node_year) = node["seasonYear"].as_i64() else {
+            continue;
+        };
+        if year.is_some_and(|year| node_year <= year) {
+            continue;
+        }
+        let better = best.is_none_or(|current| {
+            let current_year = current["seasonYear"].as_i64().unwrap_or(i64::MAX);
+            (node_year, id) < (current_year, current["id"].as_i64().unwrap_or(i64::MAX))
+        });
+        if better {
+            best = Some(node);
+        }
+    }
+    best.cloned()
+}
+
+const SOURCE_QUERY: &str = r#"
+query ($id: Int) {
+  Media(id: $id) {
+    id
+    type
+    relations {
+      edges {
+        relationType
+        node {
+          id
+          type
+          format
+          episodes
+          seasonYear
+          title { romaji english }
+        }
+      }
+    }
+  }
+}
+"#;
+
+/// The first anime made from the same source after this one, with its own sequels already
+/// the chain's problem. One extra request, and only for a show that has no sequel at all.
+fn later_run(client: &Client, media: &Value) -> Result<Option<Value>, String> {
+    let (Some(source), Some(year)) = (source_of(media), media["seasonYear"].as_i64()) else {
+        return Ok(None);
+    };
+    let body = post(client, SOURCE_QUERY, json!({ "id": source }))?;
+    let edges = body["data"]["Media"]["relations"]["edges"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    Ok(pick_later_run(&edges, &alternative_ids(media), Some(year)))
+}
+
+fn push_sequels(client: &Client, chain: &mut Vec<Value>) -> Result<(), String> {
     const MAX_CHAIN: usize = 12;
-    let mut chain = vec![media.clone()];
     while chain.len() < MAX_CHAIN {
-        let Some(next) = sequel_of(chain.last().unwrap_or(media)) else {
+        let Some(last) = chain.last() else {
+            break;
+        };
+        let Some(next) = sequel_of(last) else {
             break;
         };
         if chain.iter().any(|entry| entry["id"].as_i64() == Some(next)) {
@@ -470,6 +574,24 @@ fn season_chain(client: &Client, media: &Value) -> Result<Vec<Value>, String> {
         match fetch_entry(client, next)? {
             Some(entry) => chain.push(entry),
             None => break,
+        }
+    }
+    Ok(())
+}
+
+/// The seasons in order: this entry, every TV sequel after it, and — when it has no sequel
+/// at all — a later run adapting the same source.
+fn season_chain(client: &Client, media: &Value) -> Result<Vec<Value>, String> {
+    let mut chain = vec![media.clone()];
+    push_sequels(client, &mut chain)?;
+    if chain.len() == 1 {
+        if let Some(next) = later_run(client, media)? {
+            let entry = match next["id"].as_i64() {
+                Some(id) => fetch_entry(client, id)?.unwrap_or(next),
+                None => next,
+            };
+            chain.push(entry);
+            push_sequels(client, &mut chain)?;
         }
     }
     Ok(chain)
@@ -702,6 +824,37 @@ mod tests {
     }
 
     #[test]
+    fn picks_the_next_run_from_the_same_source() {
+        let edges = json!([
+            { "relationType": "ADAPTATION", "node": { "id": 33, "type": "ANIME", "format": "TV", "episodes": 25, "seasonYear": 1997 } },
+            { "relationType": "ADAPTATION", "node": { "id": 21560, "type": "ANIME", "format": "TV", "episodes": 12, "seasonYear": 2016 } },
+            { "relationType": "ADAPTATION", "node": { "id": 97643, "type": "ANIME", "format": "TV", "episodes": 12, "seasonYear": 2017 } },
+            { "relationType": "ADAPTATION", "node": { "id": 155011, "type": "ANIME", "format": "TV", "episodes": 13, "seasonYear": 2022 } },
+            { "relationType": "ADAPTATION", "node": { "id": 10218, "type": "ANIME", "format": "MOVIE", "episodes": 1, "seasonYear": 2012 } }
+        ])
+        .as_array()
+        .cloned()
+        .unwrap();
+        // The 2022 recut of the films and the films themselves are alternatives, not seasons.
+        let alternatives = vec![155011i64, 10218];
+        let picked = pick_later_run(&edges, &alternatives, Some(1997)).expect("the 2016 run");
+        assert_eq!(picked["id"].as_i64(), Some(21560));
+    }
+
+    #[test]
+    fn never_appends_a_remake() {
+        // "Hunter x Hunter" 2011 is an alternative of the 1999 run, not its second season.
+        let edges = json!([
+            { "relationType": "ADAPTATION", "node": { "id": 136, "type": "ANIME", "format": "TV", "episodes": 62, "seasonYear": 1999 } },
+            { "relationType": "ADAPTATION", "node": { "id": 11061, "type": "ANIME", "format": "TV", "episodes": 148, "seasonYear": 2011 } }
+        ])
+        .as_array()
+        .cloned()
+        .unwrap();
+        assert!(pick_later_run(&edges, &[11061], Some(1999)).is_none());
+    }
+
+    #[test]
     fn follows_a_sequel_filed_as_ona() {
         let entry = json!({ "relations": { "edges": [
             { "relationType": "SEQUEL", "node": { "id": 7, "format": "ONA" } }
@@ -770,6 +923,20 @@ mod tests {
                 .iter()
                 .map(|season| (season.number, season.episodes))
                 .collect::<Vec<_>>()
+        );
+
+        // The 1997 run has no sequel; the 2016 and 2017 runs adapt the same manga.
+        let berserk = lookup("Berserk".into())
+            .expect("lookup failed")
+            .expect("no entry for Berserk");
+        assert_eq!(
+            berserk
+                .seasons
+                .iter()
+                .map(|season| season.episodes)
+                .collect::<Vec<_>>(),
+            vec![Some(25), Some(12), Some(12)],
+            "the 2016 run is missing from the chain"
         );
     }
 }
