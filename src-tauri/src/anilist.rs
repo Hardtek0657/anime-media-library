@@ -692,9 +692,6 @@ fn candidates(title: String) -> Result<Vec<Candidate>, String> {
         if response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
             return Err(RATE_LIMITED.into());
         }
-        if response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
-            return Err(RATE_LIMITED.into());
-        }
         if !response.status().is_success() {
             return Err(format!("AniList answered {}.", response.status()));
         }
