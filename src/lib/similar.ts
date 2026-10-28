@@ -35,11 +35,9 @@ function foldQuotes(title: string): string {
 }
 
 /**
- * The name a shelf entry should carry instead of `stored`, or null when it already matches
- * one of AniList's names. A romaji shelf title is not a misspelling of the English one, so a
- * match on any variant settles it. What is left is a different spelling of a known name —
- * a typo, capitalization or punctuation — and the suggestion is the variant it differs
- * from, not whichever name AniList happens to display.
+ * The name to store instead of `stored`, or null when it already matches one of AniList's
+ * names. Only a typo, capitalization or punctuation difference of a real name is renamed: a
+ * romaji shelf title and a deliberately shortened one are not misspellings.
  */
 export function renameSuggestion(stored: string, variants: string[]): string | null {
   const name = stored.trim();

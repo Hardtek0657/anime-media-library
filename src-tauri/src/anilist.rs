@@ -1,6 +1,5 @@
-//! AniList lookup. A text model cannot hand back image bytes, so covers and the
-//! creator fields come from AniList's public GraphQL API, which needs no key. Only the
-//! title is sent. Artwork is returned as a data URI so the database stays one file.
+//! AniList lookup: covers and creator fields come from its public GraphQL API, which needs
+//! no key and receives only the title. Artwork returns as a data URI so the database stays one file.
 
 use reqwest::blocking::Client;
 
@@ -294,10 +293,8 @@ fn author_of(media: &Value) -> Option<String> {
     None
 }
 
-/// AniList allows about 90 requests a minute, and a season chain spends one request per
-/// season, so a shelf of a hundred titles outruns it within a couple of minutes. One
-/// request every 700 ms is a single lane under that ceiling: the sweep paces itself and
-/// rarely meets the limit at all.
+/// AniList allows about 90 requests a minute and a season chain spends one per season, so
+/// every request waits 700 ms: one lane under that ceiling.
 fn breathe() {
     std::thread::sleep(Duration::from_millis(700));
 }
@@ -479,11 +476,9 @@ fn alternative_ids(media: &Value) -> Vec<i64> {
         .collect()
 }
 
-/// AniList links seasons with SEQUEL, but a franchise can also continue as a separate
-/// adaptation of the same source: the 1997 "Berserk" has no sequel, while the 2016 run
-/// adapts the same manga. Pick the earliest later TV run that is not marked as an
-/// alternative, because a remake is exactly that ("Hunter x Hunter" 2011 is an alternative
-/// of the 1999 run, so it is never appended as a season).
+/// A franchise can continue as a separate adaptation of the same source: the 1997 "Berserk"
+/// has no sequel edge, while the 2016 run adapts the same manga. Alternatives are remakes
+/// (the 2011 "Hunter x Hunter"), so they are never appended.
 fn pick_later_run(edges: &[Value], alternatives: &[i64], year: Option<i64>) -> Option<Value> {
     let mut best: Option<&Value> = None;
     for edge in edges {

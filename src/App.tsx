@@ -191,9 +191,8 @@ export default function App() {
       errors: [],
     };
     try {
-      // A failed title must not abandon the rest of the shelf: one bad request used to
-      // stop the whole run, which left later titles without art or details. Three
-      // failures in a row is the case where the key or the network is gone.
+      // One bad title must not abandon the shelf: the run stops only after three titles in a
+      // row that neither service could answer.
       let consecutiveFailures = 0;
       let aiUsable = true;
       for (const anime of queue) {
@@ -270,9 +269,8 @@ export default function App() {
           }
         } catch (cause) {
           if (String(cause).includes("RATE_LIMIT")) {
-            // Four 65 second pauses did not clear it, so the shelf stays locked out. Stop
-            // here rather than skip: everything read so far is already saved, and the
-            // next check starts again from the same shelf.
+            // Four pauses did not clear the limit, so stop here: everything read so far is
+            // saved, and the next check starts from the same shelf.
             report.errors.push(
               `Stopped at ${report.checked} of ${report.total}: AniList is still limiting requests.`,
             );
@@ -285,9 +283,8 @@ export default function App() {
         const change = mergeGrowth(aiChange, anime.title, grown);
         if (change) report.changes.push(change);
 
-        // AniList filled the entry, so a model that rambled about the same title is noise:
-        // the user asked what changed on the shelf, not which service had a bad minute.
-        // Only a title neither service could answer counts toward stopping the run.
+        // AniList filled the entry, so a rambling model is noise; only a title neither
+        // service could answer counts toward stopping the run.
         if (aiFailure && !resolved) {
           report.errors.push(aiFailure);
           consecutiveFailures += 1;

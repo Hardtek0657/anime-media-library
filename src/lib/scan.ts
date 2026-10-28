@@ -80,10 +80,7 @@ export function scanLogText(report: ScanReport): string {
   return lines.join("\n");
 }
 
-/**
- * What a suggestion would change for one title. Only additions and increases: a check
- * never removes a season or lowers an episode count the user relied on.
- */
+/** Only additions and increases: a check never removes a season or lowers a count. */
 export function planChange(
   anime: Anime,
   suggested: { number: number; episodes: number }[],
@@ -104,18 +101,12 @@ export function planChange(
   return { title: anime.title, added, grown };
 }
 
-/**
- * True when the shelf is split finer than the source: AniList keeps "Black Clover" as one
- * 170 episode run, and a shelf holding four parts must not be flattened back to one.
- */
+/** True when the shelf is split finer than the source, such as four parts of a 170 episode run. */
 export function keepsOwnSplit(heldSeasons: number, sourceSeasons: number): boolean {
   return sourceSeasons <= 1 && heldSeasons > 1;
 }
 
-/**
- * Folds counted growth into what the model already reported, so one title stays one line.
- * A season the model added is never also reported as grown.
- */
+/** One report line per title: counted growth folds into what the model already reported. */
 export function mergeGrowth(
   change: ScanChange | null,
   title: string,

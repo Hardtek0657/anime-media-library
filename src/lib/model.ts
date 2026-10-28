@@ -50,11 +50,7 @@ export function nextUnfinished(anime: Anime): Season | null {
   return anime.seasons.find((season) => !isSeasonDone(season)) ?? null;
 }
 
-/**
- * The one season a shelf row talks about: the furthest season that has progress and
- * episodes left, otherwise the first unfinished season, otherwise the last season once
- * everything is watched.
- */
+/** The season a shelf row talks about: the furthest started one, else the first unfinished. */
 export function currentSeason(anime: Anime): Season | null {
   const seasons = anime.seasons;
   if (seasons.length === 0) return null;

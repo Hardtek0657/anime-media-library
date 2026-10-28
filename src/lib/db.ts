@@ -2,9 +2,8 @@ import Database from "@tauri-apps/plugin-sql";
 import type { Anime, AnimeFormat, Season } from "./model";
 import { keepsOwnSplit } from "./scan";
 
-// Must match the migrations URL in src-tauri/src/lib.rs. A relative sqlite name is
-// resolved against the app config dir, not the process directory, so the file always
-// lands in %APPDATA%\com.hardtek.animemedialibrary\ whichever folder starts the exe.
+// Must match the migrations URL in src-tauri/src/lib.rs: a relative sqlite name resolves
+// against the app config dir, so queries and migrations always touch the same file.
 const DB_URL = "sqlite:anime-library.db";
 
 let handle: Promise<Database> | null = null;
@@ -97,9 +96,8 @@ export async function saveAnime(
   seasons: Season[],
   removed: number[],
 ): Promise<number> {
-  // ponytail: these statements are not one transaction. A failure halfway leaves a
-  // title with fewer seasons than the form showed, fixable by editing it again. Use a
-  // Rust command with a real transaction when partial saves start losing real work.
+  // ponytail: not one transaction, so a failure halfway leaves a title with fewer seasons
+  // than the form showed. Use a Rust command with a real transaction if that loses work.
   const conn = await db();
   const title = draft.title.replace(/\s+/g, " ").trim();
   const clash = await conn.select<{ title: string }[]>(

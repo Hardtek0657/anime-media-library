@@ -36,11 +36,8 @@ function isRateLimit(cause: unknown): boolean {
   return String(cause).includes("RATE_LIMIT");
 }
 
-/**
- * One call per term. A rate limit pauses the whole check and asks again for the same term
- * instead of moving on: a skipped title is a wrong episode count, which is worse than a
- * minute of waiting.
- */
+/** A rate limit pauses the check and asks for the same term again; a skipped title would be
+ *  a wrong episode count, which is worse than a minute of waiting. */
 async function lookupOnce(
   term: string,
   onWait?: (waiting: boolean) => void,
@@ -64,11 +61,8 @@ async function lookupOnce(
   throw last;
 }
 
-/**
- * A misspelling makes AniList's search return nothing, so a failed title is retried with
- * the part before a colon and then with three words. The caller gets the number of calls
- * so the check can report its real cost.
- */
+/** Retries a title AniList cannot find with the part before a colon, then three words. The
+ *  caller gets the request count so the report can state its real cost. */
 export async function anilistLookupDeep(
   title: string,
   onWait?: (waiting: boolean) => void,
